@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/convex-api";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function ThemesPage() {
   const me = useQuery(api.users.me, {});
@@ -33,7 +34,7 @@ export default function ThemesPage() {
       setDescription("");
       toast.success("Theme created");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to create theme");
+      toast.error(getErrorMessage(err, "Unable to create theme."));
     }
   };
 

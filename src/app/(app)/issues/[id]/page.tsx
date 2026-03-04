@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowLeft, CopyCheck } from "lucide-react";
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { relativeTime } from "@/lib/date";
+import { formatDueDate, relativeTime } from "@/lib/date";
 import { api } from "@/lib/convex-api";
 import {
   BAND_LABELS,
@@ -33,7 +33,17 @@ import {
   getBandLabel,
   getStatusLabel,
 } from "@/lib/domain";
+import { getErrorMessage } from "@/lib/errors";
 import { computePriority } from "@/lib/priority";
+
+type AutoSaveState = "idle" | "saving" | "saved" | "error";
+
+function getAutoSaveLabel(state: AutoSaveState) {
+  if (state === "saving") return "Saving...";
+  if (state === "saved") return "Saved";
+  if (state === "error") return "Save failed";
+  return "";
+}
 
 export default function IssueDetailPage() {
   const params = useParams<{ id: string }>();
@@ -42,6 +52,7 @@ export default function IssueDetailPage() {
   const me = useQuery(api.users.me, {});
   const users = useQuery(api.users.listAssignable, {});
   const themes = useQuery(api.themes.list, {});
+  const customers = useQuery(api.customers.list, {});
   const data = useQuery(api.issues.getById, { issueId });
   const duplicates = useQuery(api.issues.findDuplicateCandidates, { issueId });
 
@@ -56,11 +67,13 @@ export default function IssueDetailPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [themeId, setThemeId] = useState<string>("none");
+  const [customerId, setCustomerId] = useState<string>("none");
+  const [dueDate, setDueDate] = useState("");
   const [stakeholderSummary, setStakeholderSummary] = useState("");
   const [evidenceLinksRaw, setEvidenceLinksRaw] = useState("");
 
   const [assigneeId, setAssigneeId] = useState<string>("none");
-  const [nextStatus, setNextStatus] = useState<string>("inbox");
+  const [statusValue, setStatusValue] = useState<string>("inbox");
 
   const [reach, setReach] = useState("");
   const [impact, setImpact] = useState("");
@@ -72,18 +85,27 @@ export default function IssueDetailPage() {
   const [overrideReason, setOverrideReason] = useState("");
 
   const [comment, setComment] = useState("");
+  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
+  const [hydratedIssueId, setHydratedIssueId] = useState<string | null>(null);
+  const [detailsSaveState, setDetailsSaveState] = useState<AutoSaveState>("idle");
+  const [scoreSaveState, setScoreSaveState] = useState<AutoSaveState>("idle");
+  const lastSavedBasicsRef = useRef("");
+  const lastSavedRiceRef = useRef("");
+
+  const issue = data?.issue;
 
   useEffect(() => {
-    if (!data?.issue) return;
-    const issue = data.issue;
+    if (!issue || hydratedIssueId === issue._id) return;
 
     setTitle(issue.title ?? "");
     setDescription(issue.description ?? "");
     setThemeId(issue.themeId ?? "none");
+    setCustomerId(issue.customerId ?? "none");
+    setDueDate(issue.dueDate ?? "");
     setStakeholderSummary(issue.stakeholderSummary ?? "");
     setEvidenceLinksRaw((issue.evidenceLinks ?? []).join("\n"));
     setAssigneeId(issue.assigneeId ?? "none");
-    setNextStatus(issue.status);
+    setStatusValue(issue.status);
 
     setReach(issue.reach ? String(issue.reach) : "");
     setImpact(issue.impact ? String(issue.impact) : "");
@@ -93,7 +115,46 @@ export default function IssueDetailPage() {
 
     setOverrideBand(issue.priorityBand ?? "p3");
     setOverrideReason(issue.priorityReason ?? "");
-  }, [data?.issue]);
+
+    lastSavedBasicsRef.current = JSON.stringify({
+      title: issue.title ?? "",
+      description: issue.description ?? "",
+      stakeholderSummary: issue.stakeholderSummary ?? "",
+      themeId: issue.themeId ?? null,
+      customerId: issue.customerId ?? null,
+      dueDate: issue.dueDate ?? null,
+      evidenceLinks: issue.evidenceLinks ?? [],
+    });
+    lastSavedRiceRef.current =
+      issue.reach && issue.impact && issue.confidence && issue.effort
+        ? JSON.stringify({
+            reach: issue.reach,
+            impact: issue.impact,
+            confidence: issue.confidence,
+            effort: issue.effort,
+            urgency: issue.urgency ?? "none",
+          })
+        : "";
+    setDetailsSaveState("idle");
+    setScoreSaveState("idle");
+    setHydratedIssueId(issue._id);
+  }, [hydratedIssueId, issue]);
+
+  const basicsPayload = useMemo(
+    () => ({
+      title,
+      description,
+      stakeholderSummary,
+      themeId: themeId === "none" ? null : themeId,
+      customerId: customerId === "none" ? null : customerId,
+      dueDate: dueDate || null,
+      evidenceLinks: evidenceLinksRaw
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    }),
+    [customerId, description, dueDate, evidenceLinksRaw, stakeholderSummary, themeId, title],
+  );
 
   const calculated = useMemo(() => {
     const reachValue = Number(reach);
@@ -112,58 +173,104 @@ export default function IssueDetailPage() {
     );
   }, [confidence, effort, impact, reach, urgency]);
 
-  const onSaveBasics = async () => {
-    try {
-      await updateBasics({
-        issueId,
-        title,
-        description,
-        stakeholderSummary,
-        themeId: themeId === "none" ? undefined : themeId,
-        evidenceLinks: evidenceLinksRaw
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean),
-      });
-      toast.success("Issue details updated");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to update issue");
+  const ricePayload = useMemo(() => {
+    const reachValue = Number(reach);
+    const impactValue = Number(impact);
+    const confidenceValue = Number(confidence);
+    const effortValue = Number(effort);
+    const isValid = [reachValue, impactValue, confidenceValue, effortValue].every((value) => value >= 1 && value <= 5);
+
+    if (!isValid) {
+      return null;
     }
-  };
+
+    return {
+      reach: reachValue,
+      impact: impactValue,
+      confidence: confidenceValue,
+      effort: effortValue,
+      urgency,
+    };
+  }, [confidence, effort, impact, reach, urgency]);
+
+  useEffect(() => {
+    if (!issue || hydratedIssueId !== issue._id) return;
+
+    const serializedPayload = JSON.stringify(basicsPayload);
+    if (serializedPayload === lastSavedBasicsRef.current) return;
+
+    setDetailsSaveState("saving");
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          await updateBasics({
+            issueId,
+            ...basicsPayload,
+          });
+          lastSavedBasicsRef.current = serializedPayload;
+          setDetailsSaveState("saved");
+        } catch (err) {
+          setDetailsSaveState("error");
+          toast.error(getErrorMessage(err, "Unable to auto-save issue details."));
+        }
+      })();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [basicsPayload, hydratedIssueId, issue, issueId, updateBasics]);
 
   const onAssign = async (value: string) => {
+    const previousValue = assigneeId;
     setAssigneeId(value);
-    if (value === "none") return;
     try {
-      await assign({ issueId, assigneeId: value });
-      toast.success("Assignee updated");
+      await assign({ issueId, assigneeId: value === "none" ? null : value });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to assign");
+      setAssigneeId(previousValue);
+      toast.error(getErrorMessage(err, "Unable to update assignee."));
     }
   };
 
-  const onSetRice = async () => {
-    try {
-      await setRice({
-        issueId,
-        reach: Number(reach),
-        impact: Number(impact),
-        confidence: Number(confidence),
-        effort: Number(effort),
-        urgency,
-      });
-      toast.success("RICE score updated");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to update score");
-    }
-  };
+  useEffect(() => {
+    if (!issue || hydratedIssueId !== issue._id || !ricePayload) return;
 
-  const onUpdateStatus = async () => {
+    const serializedPayload = JSON.stringify(ricePayload);
+    if (serializedPayload === lastSavedRiceRef.current) return;
+
+    setScoreSaveState("saving");
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          await setRice({
+            issueId,
+            ...ricePayload,
+          });
+          lastSavedRiceRef.current = serializedPayload;
+          setScoreSaveState("saved");
+        } catch (err) {
+          setScoreSaveState("error");
+          toast.error(getErrorMessage(err, "Unable to auto-save score."));
+        }
+      })();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [hydratedIssueId, issue, issueId, ricePayload, setRice]);
+
+  useEffect(() => {
+    if (!ricePayload) {
+      setScoreSaveState("idle");
+    }
+  }, [ricePayload]);
+
+  const onStatusChange = async (value: string) => {
+    const previousValue = statusValue;
+    setStatusValue(value);
+    if (value === previousValue) return;
     try {
-      await updateStatus({ issueId, toStatus: nextStatus });
-      toast.success(`Moved to ${nextStatus}`);
+      await updateStatus({ issueId, toStatus: value });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to update status");
+      setStatusValue(previousValue);
+      toast.error(getErrorMessage(err, "Unable to update status."));
     }
   };
 
@@ -172,18 +279,21 @@ export default function IssueDetailPage() {
       await overridePriority({ issueId, priorityBand: overrideBand, reason: overrideReason });
       toast.success("Priority overridden");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to override priority");
+      toast.error(getErrorMessage(err, "Unable to override priority."));
     }
   };
 
   const onComment = async () => {
-    if (!comment.trim()) return;
+    if (!comment.trim() || isCommentSubmitting) return;
     try {
+      setIsCommentSubmitting(true);
       await addComment({ issueId, body: comment, mentionUserIds: [] });
       setComment("");
       toast.success("Comment added");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to add comment");
+      toast.error(getErrorMessage(err, "Unable to add comment."));
+    } finally {
+      setIsCommentSubmitting(false);
     }
   };
 
@@ -197,15 +307,13 @@ export default function IssueDetailPage() {
       toast.success("Merged as duplicate");
       window.location.href = `/issues/${targetIssueId}`;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to merge duplicate");
+      toast.error(getErrorMessage(err, "Unable to merge duplicate."));
     }
   };
 
   if (!data) {
     return <div className="p-6 text-sm text-slate-500">Loading issue...</div>;
   }
-
-  const issue = data.issue;
 
   return (
     <div className="space-y-6">
@@ -219,13 +327,20 @@ export default function IssueDetailPage() {
         <div className="flex items-center gap-2">
           <Badge className="bg-slate-900 text-white">{getBandLabel(issue.priorityBand)}</Badge>
           <Badge variant="secondary">{getStatusLabel(issue.status)}</Badge>
+          {issue.customerId ? (
+            <Badge variant="outline">{customers?.find((customer: any) => customer._id === issue.customerId)?.name ?? "Customer"}</Badge>
+          ) : null}
+          {issue.dueDate ? <Badge variant="outline">Due {formatDueDate(issue.dueDate)}</Badge> : null}
         </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Issue Details</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>Issue Details</CardTitle>
+              <p className="text-xs text-slate-500">{getAutoSaveLabel(detailsSaveState)}</p>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-2">
@@ -265,11 +380,32 @@ export default function IssueDetailPage() {
             </div>
 
             <div className="grid gap-2">
+              <Label>Customer</Label>
+              <Select value={customerId} onValueChange={setCustomerId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No customer</SelectItem>
+                  {(customers ?? []).map((customer: any) => (
+                    <SelectItem key={customer._id} value={customer._id}>
+                      {customer.name}
+                      {customer.isActive ? "" : " (Inactive)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Due Date</Label>
+              <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+            </div>
+
+            <div className="grid gap-2">
               <Label>Evidence Links (one per line)</Label>
               <Textarea value={evidenceLinksRaw} onChange={(event) => setEvidenceLinksRaw(event.target.value)} rows={3} />
             </div>
-
-            <Button onClick={onSaveBasics}>Save Details</Button>
           </CardContent>
         </Card>
 
@@ -298,7 +434,7 @@ export default function IssueDetailPage() {
 
               <div className="grid gap-2">
                 <Label>Status</Label>
-                <Select value={nextStatus} onValueChange={setNextStatus}>
+                <Select value={statusValue} onValueChange={onStatusChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -310,16 +446,16 @@ export default function IssueDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="outline" onClick={onUpdateStatus}>
-                  Update Status
-                </Button>
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>RICE + Urgency</CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>RICE + Urgency</CardTitle>
+                <p className="text-xs text-slate-500">{getAutoSaveLabel(scoreSaveState)}</p>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -366,8 +502,6 @@ export default function IssueDetailPage() {
                   Enter valid values from 1-5 to compute preview.
                 </div>
               )}
-
-              <Button onClick={onSetRice}>Save Scoring</Button>
             </CardContent>
           </Card>
 
@@ -443,8 +577,21 @@ export default function IssueDetailPage() {
             <CardTitle>Comments</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a comment" rows={3} />
-            <Button onClick={onComment}>Post Comment</Button>
+            <Textarea
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              placeholder="Add a comment (Enter to post, Cmd/Ctrl+Enter for new line)"
+              rows={3}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                if (event.metaKey || event.ctrlKey) return;
+                event.preventDefault();
+                void onComment();
+              }}
+            />
+            <Button onClick={onComment} disabled={!comment.trim() || isCommentSubmitting}>
+              {isCommentSubmitting ? "Posting..." : "Post Comment"}
+            </Button>
             <Separator />
             <div className="space-y-3">
               {data.comments.map((entry: any) => (

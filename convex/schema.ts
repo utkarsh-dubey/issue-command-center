@@ -37,6 +37,19 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_active", ["isActive"]),
 
+  customers: defineTable({
+    name: v.string(),
+    nameLower: v.string(),
+    domain: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    isActive: v.boolean(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_nameLower", ["nameLower"])
+    .index("by_active", ["isActive"]),
+
   issues: defineTable({
     title: v.string(),
     description: v.optional(v.string()),
@@ -49,6 +62,7 @@ export default defineSchema({
       v.literal("done"),
     ),
     themeId: v.optional(v.id("themes")),
+    customerId: v.optional(v.id("customers")),
     reporterId: v.id("users"),
     assigneeId: v.optional(v.id("users")),
     evidenceLinks: v.array(v.string()),
@@ -70,6 +84,7 @@ export default defineSchema({
     priorityReason: v.optional(v.string()),
     isPriorityOverridden: v.boolean(),
     stakeholderSummary: v.optional(v.string()),
+    dueDate: v.optional(v.string()),
     archivedAt: v.optional(v.number()),
     archiveReason: v.optional(v.string()),
     duplicateOfIssueId: v.optional(v.id("issues")),
@@ -80,6 +95,7 @@ export default defineSchema({
     .index("by_priorityBand", ["priorityBand"])
     .index("by_assignee", ["assigneeId"])
     .index("by_theme", ["themeId"])
+    .index("by_customer", ["customerId"])
     .index("by_archived", ["archivedAt"])
     .index("by_status_archived", ["status", "archivedAt"])
     .index("by_updatedAt", ["updatedAt"]),

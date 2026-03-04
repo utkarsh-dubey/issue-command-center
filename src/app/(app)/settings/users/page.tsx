@@ -19,6 +19,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/convex-api";
 import { ROLES } from "@/lib/domain";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function UserSettingsPage() {
   const me = useQuery(api.users.me, {});
@@ -59,7 +60,7 @@ export default function UserSettingsPage() {
       setEmail("");
       toast.success("Invite created");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to create invite");
+      toast.error(getErrorMessage(err, "Unable to create invite."));
     }
   };
 
@@ -68,7 +69,7 @@ export default function UserSettingsPage() {
       await updateRole({ userId, role: nextRole });
       toast.success("Role updated");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to update role");
+      toast.error(getErrorMessage(err, "Unable to update role."));
     }
   };
 

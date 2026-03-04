@@ -12,10 +12,15 @@ function isArchived(issue: any) {
   return Boolean(issue.archivedAt);
 }
 
-function applyInboxFilters(issues: any[], args: { search?: string; themeId?: string; urgency?: string }) {
+function isValidDueDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function applyInboxFilters(issues: any[], args: { search?: string; themeId?: string; customerId?: string; urgency?: string }) {
   return issues.filter((issue) => {
     if (issue.status !== "inbox" || isArchived(issue)) return false;
     if (args.themeId && issue.themeId !== args.themeId) return false;
+    if (args.customerId && issue.customerId !== args.customerId) return false;
     if (args.urgency && issue.urgency !== args.urgency) return false;
     if (args.search) {
       const needle = args.search.toLowerCase();
@@ -31,8 +36,14 @@ function applyPipelineFilters(
   args: {
     status?: string;
     priorityBand?: string;
-    assigneeId?: string;
-    themeId?: string;
+    assigneeId?: string | "none";
+    themeId?: string | "none";
+    customerId?: string | "none";
+    urgency?: string;
+    hasScore?: boolean;
+    scoreMin?: number;
+    scoreMax?: number;
+    updatedAfter?: number;
     search?: string;
   },
 ) {
@@ -41,14 +52,74 @@ function applyPipelineFilters(
     if (issue.status === "inbox") return false;
     if (args.status && issue.status !== args.status) return false;
     if (args.priorityBand && issue.priorityBand !== args.priorityBand) return false;
-    if (args.assigneeId && issue.assigneeId !== args.assigneeId) return false;
-    if (args.themeId && issue.themeId !== args.themeId) return false;
+    if (args.assigneeId === "none" && issue.assigneeId) return false;
+    if (args.assigneeId && args.assigneeId !== "none" && issue.assigneeId !== args.assigneeId) return false;
+    if (args.themeId === "none" && issue.themeId) return false;
+    if (args.themeId && args.themeId !== "none" && issue.themeId !== args.themeId) return false;
+    if (args.customerId === "none" && issue.customerId) return false;
+    if (args.customerId && args.customerId !== "none" && issue.customerId !== args.customerId) return false;
+    if (args.urgency && issue.urgency !== args.urgency) return false;
+    if (typeof args.hasScore === "boolean") {
+      const hasScore = typeof issue.finalPriorityScore === "number";
+      if (hasScore !== args.hasScore) return false;
+    }
+    if (typeof args.scoreMin === "number") {
+      if (typeof issue.finalPriorityScore !== "number" || issue.finalPriorityScore < args.scoreMin) return false;
+    }
+    if (typeof args.scoreMax === "number") {
+      if (typeof issue.finalPriorityScore !== "number" || issue.finalPriorityScore > args.scoreMax) return false;
+    }
+    if (typeof args.updatedAfter === "number" && issue.updatedAt < args.updatedAfter) return false;
     if (args.search) {
       const needle = args.search.toLowerCase();
       const haystack = `${issue.title} ${issue.description ?? ""}`.toLowerCase();
       if (!haystack.includes(needle)) return false;
     }
     return true;
+  });
+}
+
+function sortPipelineIssues(
+  issues: any[],
+  sortBy:
+    | "priority_desc"
+    | "priority_asc"
+    | "updated_desc"
+    | "updated_asc"
+    | "title_asc"
+    | "title_desc"
+    | undefined,
+) {
+  const mode = sortBy ?? "priority_desc";
+
+  return [...issues].sort((a, b) => {
+    if (mode === "priority_asc") {
+      const aScore = a.finalPriorityScore ?? Number.POSITIVE_INFINITY;
+      const bScore = b.finalPriorityScore ?? Number.POSITIVE_INFINITY;
+      if (aScore === bScore) return b.updatedAt - a.updatedAt;
+      return aScore - bScore;
+    }
+
+    if (mode === "updated_desc") {
+      return b.updatedAt - a.updatedAt;
+    }
+
+    if (mode === "updated_asc") {
+      return a.updatedAt - b.updatedAt;
+    }
+
+    if (mode === "title_asc") {
+      return a.title.localeCompare(b.title);
+    }
+
+    if (mode === "title_desc") {
+      return b.title.localeCompare(a.title);
+    }
+
+    const bScore = b.finalPriorityScore ?? -1;
+    const aScore = a.finalPriorityScore ?? -1;
+    if (aScore === bScore) return b.updatedAt - a.updatedAt;
+    return bScore - aScore;
   });
 }
 
@@ -95,6 +166,7 @@ export const listInbox = query({
   args: {
     search: v.optional(v.string()),
     themeId: v.optional(v.id("themes")),
+    customerId: v.optional(v.id("customers")),
     urgency: v.optional(
       v.union(v.literal("none"), v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("critical")),
     ),
@@ -126,8 +198,26 @@ export const listPipeline = query({
   args: {
     status: v.optional(v.union(v.literal("triage"), v.literal("planned"), v.literal("doing"), v.literal("done"))),
     priorityBand: v.optional(v.union(v.literal("p0"), v.literal("p1"), v.literal("p2"), v.literal("p3"))),
-    assigneeId: v.optional(v.id("users")),
-    themeId: v.optional(v.id("themes")),
+    assigneeId: v.optional(v.union(v.id("users"), v.literal("none"))),
+    themeId: v.optional(v.union(v.id("themes"), v.literal("none"))),
+    customerId: v.optional(v.union(v.id("customers"), v.literal("none"))),
+    urgency: v.optional(
+      v.union(v.literal("none"), v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("critical")),
+    ),
+    hasScore: v.optional(v.boolean()),
+    scoreMin: v.optional(v.number()),
+    scoreMax: v.optional(v.number()),
+    updatedWithin: v.optional(v.union(v.literal("24h"), v.literal("7d"), v.literal("30d"), v.literal("90d"))),
+    sortBy: v.optional(
+      v.union(
+        v.literal("priority_desc"),
+        v.literal("priority_asc"),
+        v.literal("updated_desc"),
+        v.literal("updated_asc"),
+        v.literal("title_asc"),
+        v.literal("title_desc"),
+      ),
+    ),
     search: v.optional(v.string()),
     paginationOpts: v.optional(paginationOptsValidator),
   },
@@ -135,12 +225,24 @@ export const listPipeline = query({
     await requireUser(ctx);
 
     const issues = await ctx.db.query("issues").collect();
-    const filtered = applyPipelineFilters(issues, args as any).sort((a, b) => {
-      const bScore = b.finalPriorityScore ?? -1;
-      const aScore = a.finalPriorityScore ?? -1;
-      if (aScore === bScore) return b.updatedAt - a.updatedAt;
-      return bScore - aScore;
-    });
+    const updatedAfter =
+      args.updatedWithin === "24h"
+        ? Date.now() - 24 * 60 * 60 * 1000
+        : args.updatedWithin === "7d"
+          ? Date.now() - 7 * 24 * 60 * 60 * 1000
+          : args.updatedWithin === "30d"
+            ? Date.now() - 30 * 24 * 60 * 60 * 1000
+            : args.updatedWithin === "90d"
+              ? Date.now() - 90 * 24 * 60 * 60 * 1000
+              : undefined;
+
+    const filtered = sortPipelineIssues(
+      applyPipelineFilters(issues, {
+        ...args,
+        updatedAfter,
+      } as any),
+      args.sortBy,
+    );
 
     if (!args.paginationOpts) {
       return filtered;
@@ -195,7 +297,9 @@ export const updateBasics = mutation({
     issueId: v.id("issues"),
     title: v.optional(v.string()),
     description: v.optional(v.string()),
-    themeId: v.optional(v.id("themes")),
+    themeId: v.optional(v.union(v.id("themes"), v.null())),
+    customerId: v.optional(v.union(v.id("customers"), v.null())),
+    dueDate: v.optional(v.union(v.string(), v.null())),
     evidenceLinks: v.optional(v.array(v.string())),
     stakeholderSummary: v.optional(v.string()),
   },
@@ -206,6 +310,25 @@ export const updateBasics = mutation({
     const issue = await ctx.db.get(args.issueId);
     if (!issue || issue.archivedAt) {
       throw new Error("Issue not found.");
+    }
+
+    if (args.customerId !== undefined && args.customerId !== null) {
+      const customer = await ctx.db.get(args.customerId);
+      if (!customer) {
+        throw new Error("Customer not found.");
+      }
+
+      const customerChanged = args.customerId !== issue.customerId;
+      if (customerChanged && !customer.isActive) {
+        throw new Error("Cannot assign an inactive customer.");
+      }
+    }
+
+    if (args.dueDate !== undefined && args.dueDate !== null) {
+      const dueDate = args.dueDate.trim();
+      if (!isValidDueDate(dueDate)) {
+        throw new Error("Due date must be in YYYY-MM-DD format.");
+      }
     }
 
     const patch: Record<string, unknown> = {
@@ -220,7 +343,15 @@ export const updateBasics = mutation({
     }
 
     if (args.themeId !== undefined) {
-      patch.themeId = args.themeId;
+      patch.themeId = args.themeId ?? undefined;
+    }
+
+    if (args.customerId !== undefined) {
+      patch.customerId = args.customerId ?? undefined;
+    }
+
+    if (args.dueDate !== undefined) {
+      patch.dueDate = args.dueDate ? args.dueDate.trim() : undefined;
     }
 
     await ctx.db.patch(args.issueId, patch);
@@ -234,11 +365,15 @@ export const updateBasics = mutation({
         title: issue.title,
         description: issue.description,
         themeId: issue.themeId,
+        customerId: issue.customerId,
+        dueDate: issue.dueDate,
       },
       after: {
         title: updated?.title,
         description: updated?.description,
         themeId: updated?.themeId,
+        customerId: updated?.customerId,
+        dueDate: updated?.dueDate,
       },
     });
 
@@ -308,7 +443,7 @@ export const updateStatus = mutation({
 export const assign = mutation({
   args: {
     issueId: v.id("issues"),
-    assigneeId: v.id("users"),
+    assigneeId: v.union(v.id("users"), v.null()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
@@ -319,13 +454,15 @@ export const assign = mutation({
       throw new Error("Issue not found.");
     }
 
-    const assignee = await ctx.db.get(args.assigneeId);
-    if (!assignee || !assignee.isActive) {
-      throw new Error("Assignee not found.");
+    if (args.assigneeId !== null) {
+      const assignee = await ctx.db.get(args.assigneeId);
+      if (!assignee || !assignee.isActive) {
+        throw new Error("Assignee not found.");
+      }
     }
 
     await ctx.db.patch(args.issueId, {
-      assigneeId: args.assigneeId,
+      assigneeId: args.assigneeId ?? undefined,
       updatedAt: Date.now(),
     });
 
@@ -334,7 +471,7 @@ export const assign = mutation({
       actorId: user._id,
       eventType: "assignee_changed",
       before: { assigneeId: issue.assigneeId },
-      after: { assigneeId: args.assigneeId },
+      after: { assigneeId: args.assigneeId ?? null },
     });
 
     return await ctx.db.get(args.issueId);

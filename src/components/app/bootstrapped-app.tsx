@@ -8,31 +8,7 @@ import { AppShell } from "@/components/app/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/convex-api";
-
-function normalizeErrorMessage(message: string) {
-  const trimmed = message.trim();
-  const uncaughtPrefix = "Uncaught Error:";
-  const uncaughtIndex = trimmed.indexOf(uncaughtPrefix);
-  const base = uncaughtIndex >= 0 ? trimmed.slice(uncaughtIndex + uncaughtPrefix.length).trim() : trimmed;
-
-  if (base.includes("You are not invited yet.")) {
-    return "This account is signed in, but is not invited to this workspace.";
-  }
-
-  if (base.includes("Google account email is missing in auth token.")) {
-    return "Your auth token is missing email. Clerk JWT template `convex` must include email and name claims.";
-  }
-
-  if (base.includes("You must be signed in.")) {
-    return "Authentication with Convex is not ready yet. Retry in a few seconds.";
-  }
-
-  if (base.length > 0) {
-    return base;
-  }
-
-  return "Unable to initialize user access.";
-}
+import { getErrorMessage } from "@/lib/errors";
 
 export function BootstrappedApp({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
@@ -71,8 +47,7 @@ export function BootstrappedApp({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         if (!cancelled) {
-          const message = err instanceof Error ? err.message : "Unable to initialize user access.";
-          setError(normalizeErrorMessage(message));
+          setError(getErrorMessage(err, "Unable to initialize user access."));
         }
       }
     };

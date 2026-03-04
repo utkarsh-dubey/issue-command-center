@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { relativeTime } from "@/lib/date";
 import { api } from "@/lib/convex-api";
 import { getStatusLabel, getUrgencyLabel } from "@/lib/domain";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function InboxPage() {
   const me = useQuery(api.users.me, {});
@@ -43,7 +44,7 @@ export default function InboxPage() {
         window.location.href = `/issues/${issueId}`;
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to create issue");
+      toast.error(getErrorMessage(err, "Unable to create issue."));
     }
   };
 
@@ -52,7 +53,7 @@ export default function InboxPage() {
       await moveStatus({ issueId, toStatus: "triage" });
       toast.success("Issue moved to triage");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to update status");
+      toast.error(getErrorMessage(err, "Unable to update status."));
     }
   };
 

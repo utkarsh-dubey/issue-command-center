@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/convex-api";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function NotificationSettingsPage() {
   const me = useQuery(api.users.me, {});
@@ -74,7 +75,7 @@ export default function NotificationSettingsPage() {
       });
       toast.success("Notification settings updated");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Unable to update settings");
+      toast.error(getErrorMessage(err, "Unable to update settings."));
     }
   };
 
