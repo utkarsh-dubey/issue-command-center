@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Issue Command Center
 
-## Getting Started
+Standalone Linear replacement for product intake, prioritization, and stakeholder visibility.
 
-First, run the development server:
+## Stack
+- Next.js 16 (App Router)
+- Convex (database, functions, cron)
+- Clerk (Google SSO)
+- shadcn/ui + Tailwind CSS v4
+- Bun
+
+## MVP Capabilities
+- Structured intake inbox (`inbox -> triage -> planned -> doing -> done`)
+- RICE (1-5) + urgency multipliers + admin priority override
+- Role model: `admin`, `member`, `viewer`
+- Invite-only onboarding
+- Global activity feed
+- Issue comments and duplicate merge flow
+- Stakeholder dashboard (read-only)
+- Discord webhook notifications for status/priority updates
+- Weekly Monday 09:00 Asia/Kolkata digest (Convex cron)
+
+## Required Environment Variables
+Copy `.env.example` to `.env.local`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set values for:
+- `NEXT_PUBLIC_CONVEX_URL`
+- `CONVEX_DEPLOYMENT`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `CLERK_JWT_ISSUER_DOMAIN`
+- `DISCORD_WEBHOOK_URL`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local Development
+```bash
+bun install
+bunx convex dev
+bun run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+## Smoke Checks
+```bash
+bun run lint
+bun run test
+# or
+bun run smoke
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Deployment
+- Frontend: Vercel
+- Backend: Convex Cloud
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Typical flow:
+1. Create Convex production deployment and set `CONVEX_DEPLOYMENT` / `NEXT_PUBLIC_CONVEX_URL`.
+2. Configure Clerk production keys and issuer domain.
+3. Set Vercel env vars to match `.env.example`.
+4. Deploy Vercel + Convex.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Notes
+- First signed-in user is auto-bootstrapped as `admin` if no users exist.
+- Afterwards, access is invite-only via admin-created invites.
+- Weekly digest cron is hard-coded to Monday 03:30 UTC (09:00 IST).
