@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 
 import { AppShell } from "@/components/app/app-shell";
@@ -10,12 +9,51 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/convex-api";
 
+function normalizeErrorMessage(message: string) {
+  const trimmed = message.trim();
+  const uncaughtPrefix = "Uncaught Error:";
+  const uncaughtIndex = trimmed.indexOf(uncaughtPrefix);
+  const base = uncaughtIndex >= 0 ? trimmed.slice(uncaughtIndex + uncaughtPrefix.length).trim() : trimmed;
+
+  if (base.includes("You are not invited yet.")) {
+    return "This account is signed in, but is not invited to this workspace.";
+  }
+
+  if (base.includes("Google account email is missing in auth token.")) {
+    return "Your auth token is missing email. Clerk JWT template `convex` must include email and name claims.";
+  }
+
+  if (base.includes("You must be signed in.")) {
+    return "Authentication with Convex is not ready yet. Retry in a few seconds.";
+  }
+
+  if (base.length > 0) {
+    return base;
+  }
+
+  return "Unable to initialize user access.";
+}
+
 export function BootstrappedApp({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
   const { isLoading: isConvexAuthLoading, isAuthenticated } = useConvexAuth();
   const ensureSelf = useMutation(api.users.ensureSelf);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSwitchAccount = async () => {
+    try {
+      setIsSigningOut(true);
+      await signOut({ redirectUrl: "/sign-in" });
+    } catch {
+      window.location.href = "/sign-in";
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || isConvexAuthLoading || !isAuthenticated || ready) {
@@ -34,13 +72,7 @@ export function BootstrappedApp({ children }: { children: React.ReactNode }) {
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : "Unable to initialize user access.";
-          if (message.includes("You must be signed in.")) {
-            setError(
-              "Authentication with Convex is not ready yet. If this keeps happening, configure Clerk JWT template `convex` and CLERK_JWT_ISSUER_DOMAIN for Convex.",
-            );
-            return;
-          }
-          setError(message);
+          setError(normalizeErrorMessage(message));
         }
       }
     };
@@ -87,8 +119,8 @@ export function BootstrappedApp({ children }: { children: React.ReactNode }) {
             </p>
             <div className="flex gap-2">
               <Button onClick={() => window.location.reload()}>Retry Connection</Button>
-              <Button asChild variant="outline">
-                <Link href="/sign-in">Back to sign in</Link>
+              <Button variant="outline" onClick={handleSwitchAccount} disabled={isSigningOut}>
+                {isSigningOut ? "Signing out..." : "Sign out & switch account"}
               </Button>
             </div>
           </CardContent>
@@ -107,11 +139,19 @@ export function BootstrappedApp({ children }: { children: React.ReactNode }) {
           <CardContent className="space-y-4">
             <p className="text-sm text-slate-600">{error}</p>
             <p className="text-sm text-slate-600">
-              This workspace uses admin invites only. Ask an admin to invite your Google account first.
+              Signed in as <span className="font-medium">{user?.primaryEmailAddress?.emailAddress ?? "unknown account"}</span>.
             </p>
-            <Button asChild>
-              <Link href="/sign-in">Back to sign in</Link>
-            </Button>
+            <p className="text-sm text-slate-600">
+              This workspace uses admin invites only. Ask an admin to invite this email, or switch to an invited account.
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Retry
+              </Button>
+              <Button onClick={handleSwitchAccount} disabled={isSigningOut}>
+                {isSigningOut ? "Signing out..." : "Sign out & switch account"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

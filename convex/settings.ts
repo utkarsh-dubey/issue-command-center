@@ -3,19 +3,10 @@ import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
 import { assertAdmin, requireUser } from "./auth";
 
-async function getOrCreateSettings(ctx: { db: any }) {
-  const existing = await ctx.db
-    .query("system_settings")
-    .withIndex("by_key", (q: any) => q.eq("key", "singleton"))
-    .first();
-
-  if (existing) {
-    return existing;
-  }
-
+function defaultSettings() {
   const now = Date.now();
-  const id = await ctx.db.insert("system_settings", {
-    key: "singleton",
+  return {
+    key: "singleton" as const,
     digestEnabled: true,
     digestTimezone: "Asia/Kolkata",
     digestDay: "monday",
@@ -26,16 +17,41 @@ async function getOrCreateSettings(ctx: { db: any }) {
     discordNotifyOnPriorityChange: true,
     createdAt: now,
     updatedAt: now,
-  });
+  };
+}
 
-  return await ctx.db.get(id);
+async function getExistingSettings(ctx: { db: any }) {
+  return await ctx.db
+    .query("system_settings")
+    .withIndex("by_key", (q: any) => q.eq("key", "singleton"))
+    .first();
+}
+
+async function getSettingsOrDefault(ctx: { db: any }) {
+  const existing = await getExistingSettings(ctx);
+  return existing ?? defaultSettings();
+}
+
+async function ensureSettingsForWrite(ctx: { db: any }) {
+  const existing = await getExistingSettings(ctx);
+  if (existing) {
+    return existing;
+  }
+
+  const seed = defaultSettings();
+  const id = await ctx.db.insert("system_settings", seed);
+  const created = await ctx.db.get(id);
+  if (!created) {
+    throw new Error("Failed to initialize system settings.");
+  }
+  return created;
 }
 
 export const get = query({
   args: {},
   handler: async (ctx) => {
     const { user } = await requireUser(ctx);
-    const settings = await getOrCreateSettings(ctx);
+    const settings = await getSettingsOrDefault(ctx);
 
     if (user.role === "viewer") {
       return {
@@ -54,7 +70,7 @@ export const get = query({
 export const getInternal = internalQuery({
   args: {},
   handler: async (ctx) => {
-    return await getOrCreateSettings(ctx);
+    return await getSettingsOrDefault(ctx);
   },
 });
 
@@ -73,7 +89,7 @@ export const update = mutation({
     const { user } = await requireUser(ctx);
     assertAdmin(user);
 
-    const settings = await getOrCreateSettings(ctx);
+    const settings = await ensureSettingsForWrite(ctx);
 
     await ctx.db.patch(settings._id, {
       ...args,
