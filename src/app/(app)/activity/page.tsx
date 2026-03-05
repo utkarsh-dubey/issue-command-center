@@ -22,7 +22,7 @@ export default function ActivityPage() {
       <Card>
         <CardHeader>
           <CardTitle>Global Activity Feed</CardTitle>
-          <p className="text-sm text-slate-600">Track all major issue changes and spot what was added or reprioritized.</p>
+          <p className="text-sm text-muted-foreground">Track all major issue changes and spot what was added or reprioritized.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input
@@ -32,20 +32,20 @@ export default function ActivityPage() {
           />
           <div className="space-y-2">
             {events?.map((event: any) => (
-              <div key={event._id} className="rounded-xl border border-slate-200 bg-white p-3">
+              <div key={event._id} className="rounded-xl border border-border bg-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">{event.eventType}</Badge>
-                    <span className="text-xs text-slate-500">{relativeTime(event.createdAt)}</span>
+                    <span className="text-xs text-muted-foreground">{relativeTime(event.createdAt)}</span>
                   </div>
                   <ButtonLink href={`/issues/${event.issueId}`}>Open issue</ButtonLink>
                 </div>
                 {event.after ? (
-                  <p className="mt-2 text-xs text-slate-500">After: {JSON.stringify(event.after)}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">After: {JSON.stringify(event.after)}</p>
                 ) : null}
               </div>
             ))}
-            {events && events.length === 0 ? <p className="text-sm text-slate-500">No activity yet.</p> : null}
+            {events && events.length === 0 ? <p className="text-sm text-muted-foreground">No activity yet.</p> : null}
           </div>
         </CardContent>
       </Card>
@@ -57,7 +57,7 @@ function ButtonLink({ href, children }: { href: string; children: React.ReactNod
   return (
     <Link
       href={href}
-      className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+      className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-muted"
     >
       {children}
     </Link>

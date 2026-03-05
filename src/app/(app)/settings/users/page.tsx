@@ -34,7 +34,7 @@ export default function UserSettingsPage() {
   const [role, setRole] = useState<string>("member");
 
   if (!me) {
-    return <div className="text-sm text-slate-500">Loading...</div>;
+    return <div className="text-sm text-muted-foreground">Loading...</div>;
   }
 
   if (me.role !== "admin") {
@@ -44,7 +44,7 @@ export default function UserSettingsPage() {
           <CardTitle>Users & Access</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-600">Only admins can view and update user management settings.</p>
+          <p className="text-sm text-muted-foreground">Only admins can view and update user management settings.</p>
         </CardContent>
       </Card>
     );
@@ -152,15 +152,15 @@ export default function UserSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           {(invites ?? []).map((invite: any) => (
-            <div key={invite._id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+            <div key={invite._id} className="flex items-center justify-between rounded-lg border border-border p-3">
               <div>
                 <p className="font-medium">{invite.email}</p>
-                <p className="text-xs text-slate-500">Role: {invite.role}</p>
+                <p className="text-xs text-muted-foreground">Role: {invite.role}</p>
               </div>
               <Badge variant="secondary">{invite.status}</Badge>
             </div>
           ))}
-          {invites && invites.length === 0 ? <p className="text-sm text-slate-500">No invites yet.</p> : null}
+          {invites && invites.length === 0 ? <p className="text-sm text-muted-foreground">No invites yet.</p> : null}
         </CardContent>
       </Card>
     </div>

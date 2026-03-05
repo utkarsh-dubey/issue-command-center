@@ -60,10 +60,10 @@ export default function InboxPage() {
   return (
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="border-cyan-100 bg-[linear-gradient(135deg,#effbff_0%,#ffffff_64%)]">
+        <Card className="border-cyan-100 bg-[linear-gradient(135deg,#effbff_0%,#ffffff_64%)] dark:border-cyan-900 dark:bg-[linear-gradient(135deg,oklch(0.2_0.02_220)_0%,oklch(0.19_0.01_250)_64%)]">
           <CardHeader>
             <CardTitle className="text-xl">Triage Inbox</CardTitle>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               Every new item lands here first. Nothing enters planning without triage and explicit priority logic.
             </p>
           </CardHeader>
@@ -73,9 +73,9 @@ export default function InboxPage() {
                 placeholder="Search inbox..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="bg-white"
+                className="bg-background"
               />
-              <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>Current items:</span>
                 <Badge variant="secondary">{inbox?.length ?? 0}</Badge>
                 <span>Role:</span>
@@ -127,7 +127,7 @@ export default function InboxPage() {
                 <TableRow key={issue._id}>
                   <TableCell>
                     <div className="font-medium">{issue.title}</div>
-                    {issue.description ? <p className="mt-1 line-clamp-2 text-xs text-slate-500">{issue.description}</p> : null}
+                    {issue.description ? <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{issue.description}</p> : null}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{getStatusLabel(issue.status)}</Badge>
@@ -135,7 +135,7 @@ export default function InboxPage() {
                   <TableCell>
                     <Badge variant="secondary">{getUrgencyLabel(issue.urgency)}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm text-slate-500">{relativeTime(issue.updatedAt)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{relativeTime(issue.updatedAt)}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
                       <Button asChild variant="outline" size="sm">
@@ -153,7 +153,7 @@ export default function InboxPage() {
               ))}
               {inbox && inbox.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-sm text-slate-500">
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                     Inbox is empty.
                   </TableCell>
                 </TableRow>

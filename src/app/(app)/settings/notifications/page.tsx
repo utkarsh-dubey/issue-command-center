@@ -45,7 +45,7 @@ export default function NotificationSettingsPage() {
   }, [settings]);
 
   if (!me) {
-    return <div className="text-sm text-slate-500">Loading...</div>;
+    return <div className="text-sm text-muted-foreground">Loading...</div>;
   }
 
   if (me.role !== "admin") {
@@ -55,7 +55,7 @@ export default function NotificationSettingsPage() {
           <CardTitle>Notification Settings</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-slate-600">Only admins can edit notification settings.</p>
+          <p className="text-sm text-muted-foreground">Only admins can edit notification settings.</p>
         </CardContent>
       </Card>
     );
@@ -84,7 +84,7 @@ export default function NotificationSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Discord Alerts + Weekly Digest</CardTitle>
-          <p className="text-sm text-slate-600">Configure real-time status/priority notifications and scheduled stakeholder digest.</p>
+          <p className="text-sm text-muted-foreground">Configure real-time status/priority notifications and scheduled stakeholder digest.</p>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-1.5">

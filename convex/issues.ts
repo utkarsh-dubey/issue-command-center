@@ -415,9 +415,22 @@ export const updateStatus = mutation({
     }
 
     const now = Date.now();
+    const durationInPreviousMs = issue.statusChangedAt ? now - issue.statusChangedAt : undefined;
+
     await ctx.db.patch(args.issueId, {
       status: args.toStatus,
+      statusChangedAt: now,
       updatedAt: now,
+    });
+
+    // Record stage transition for analytics
+    await ctx.db.insert("stage_transitions", {
+      issueId: args.issueId,
+      fromStatus: issue.status,
+      toStatus: args.toStatus,
+      actorId: user._id,
+      transitionedAt: now,
+      durationInPreviousMs,
     });
 
     await logIssueEvent(ctx, {
@@ -611,6 +624,168 @@ export const overridePriority = mutation({
   },
 });
 
+export const globalSearch = query({
+  args: {
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const limit = args.limit ?? 10;
+    const needle = args.query.toLowerCase();
+    const issues = await ctx.db.query("issues").collect();
+    return issues
+      .filter((issue) => {
+        if (issue.archivedAt) return false;
+        const haystack = `${issue.title} ${issue.description ?? ""}`.toLowerCase();
+        return haystack.includes(needle);
+      })
+      .slice(0, limit)
+      .map((issue) => ({
+        _id: issue._id,
+        title: issue.title,
+        status: issue.status,
+        priorityBand: issue.priorityBand,
+      }));
+  },
+});
+
+export const listKanban = query({
+  args: {
+    priorityBand: v.optional(v.union(v.literal("p0"), v.literal("p1"), v.literal("p2"), v.literal("p3"))),
+    assigneeId: v.optional(v.union(v.id("users"), v.literal("none"))),
+    themeId: v.optional(v.union(v.id("themes"), v.literal("none"))),
+    customerId: v.optional(v.union(v.id("customers"), v.literal("none"))),
+    search: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const issues = await ctx.db.query("issues").collect();
+    const filtered = issues.filter((issue) => {
+      if (isArchived(issue)) return false;
+      if (issue.status === "inbox") return false;
+      if (args.priorityBand && issue.priorityBand !== args.priorityBand) return false;
+      if (args.assigneeId === "none" && issue.assigneeId) return false;
+      if (args.assigneeId && args.assigneeId !== "none" && issue.assigneeId !== args.assigneeId) return false;
+      if (args.themeId === "none" && issue.themeId) return false;
+      if (args.themeId && args.themeId !== "none" && issue.themeId !== args.themeId) return false;
+      if (args.customerId === "none" && issue.customerId) return false;
+      if (args.customerId && args.customerId !== "none" && issue.customerId !== args.customerId) return false;
+      if (args.search) {
+        const needle = args.search.toLowerCase();
+        const haystack = `${issue.title} ${issue.description ?? ""}`.toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
+    });
+
+    const columns: Record<string, any[]> = { triage: [], planned: [], doing: [], done: [] };
+    for (const issue of filtered) {
+      if (columns[issue.status]) {
+        columns[issue.status].push(issue);
+      }
+    }
+    for (const status of Object.keys(columns)) {
+      columns[status].sort((a: any, b: any) => {
+        const aOrder = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+        const bOrder = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return (b.finalPriorityScore ?? 0) - (a.finalPriorityScore ?? 0);
+      });
+    }
+    return columns;
+  },
+});
+
+export const reorder = mutation({
+  args: {
+    issueId: v.id("issues"),
+    toStatus: v.union(v.literal("triage"), v.literal("planned"), v.literal("doing"), v.literal("done")),
+    sortOrder: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireUser(ctx);
+
+    const issue = await ctx.db.get(args.issueId);
+    if (!issue || issue.archivedAt) throw new Error("Issue not found.");
+
+    const statusChanged = issue.status !== args.toStatus;
+    if (statusChanged) {
+      if (!canTransition(issue.status, args.toStatus as any)) {
+        throw new Error(`Invalid status transition ${issue.status} -> ${args.toStatus}`);
+      }
+    }
+
+    const now = Date.now();
+    const patch: Record<string, unknown> = {
+      sortOrder: args.sortOrder,
+      updatedAt: now,
+    };
+
+    if (statusChanged) {
+      patch.status = args.toStatus;
+      if (issue.statusChangedAt) {
+        const durationInPreviousMs = now - issue.statusChangedAt;
+        await ctx.db.insert("stage_transitions", {
+          issueId: args.issueId,
+          fromStatus: issue.status,
+          toStatus: args.toStatus,
+          actorId: user._id,
+          transitionedAt: now,
+          durationInPreviousMs,
+        });
+      }
+      patch.statusChangedAt = now;
+
+      await logIssueEvent(ctx, {
+        issueId: args.issueId,
+        actorId: user._id,
+        eventType: "status_changed",
+        before: { status: issue.status },
+        after: { status: args.toStatus },
+      });
+    }
+
+    await ctx.db.patch(args.issueId, patch);
+    return await ctx.db.get(args.issueId);
+  },
+});
+
+export const listCalendar = query({
+  args: {
+    startDate: v.string(),
+    endDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireUser(ctx);
+    const issues = await ctx.db.query("issues").collect();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return issues.filter((issue) => {
+      if (isArchived(issue)) return false;
+      if (!issue.dueDate) return false;
+      const isInRange = issue.dueDate >= args.startDate && issue.dueDate <= args.endDate;
+      const isOverdue = issue.dueDate < today && issue.status !== "done";
+      return isInRange || isOverdue;
+    });
+  },
+});
+
+export const listMyWork = query({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await requireUser(ctx);
+    const issues = await ctx.db.query("issues").collect();
+    return issues
+      .filter((issue) => {
+        if (isArchived(issue)) return false;
+        if (issue.assigneeId !== user._id) return false;
+        return true;
+      })
+      .sort((a, b) => (b.finalPriorityScore ?? 0) - (a.finalPriorityScore ?? 0));
+  },
+});
+
 export const findDuplicateCandidates = query({
   args: {
     issueId: v.id("issues"),
@@ -701,5 +876,49 @@ export const mergeDuplicate = mutation({
       sourceIssueId: args.sourceIssueId,
       targetIssueId: args.targetIssueId,
     };
+  },
+});
+
+export const createFromTemplate = mutation({
+  args: {
+    templateId: v.id("issue_templates"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireUser(ctx);
+    assertCanCreateOrEdit(user);
+
+    const template = await ctx.db.get(args.templateId);
+    if (!template || !template.isActive) throw new Error("Template not found or inactive.");
+
+    const now = Date.now();
+    const issueId = await ctx.db.insert("issues", {
+      title: args.title || template.titleTemplate,
+      description: args.description || template.bodyTemplate,
+      source: "template",
+      status: "inbox",
+      priorityBand: "p3",
+      isPriorityOverridden: false,
+      urgencyMultiplier: 1,
+      evidenceLinks: [],
+      reporterId: user._id,
+      assigneeId: template.defaultAssigneeId,
+      themeId: template.defaultThemeId,
+      urgency: (template.defaultUrgency as any) ?? "none",
+      statusChangedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await logIssueEvent(ctx, {
+      issueId,
+      actorId: user._id,
+      eventType: "created",
+      before: null,
+      after: { source: "template", templateId: args.templateId },
+    });
+
+    return issueId;
   },
 });

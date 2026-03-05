@@ -40,22 +40,22 @@ export default function ThemesPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-slate-200">
+      <Card className="border-border">
         <CardHeader>
           <CardTitle>Themes</CardTitle>
-          <p className="text-sm text-slate-600">Use themes to group issues for leadership reporting without adding epic complexity.</p>
+          <p className="text-sm text-muted-foreground">Use themes to group issues for leadership reporting without adding epic complexity.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           {themes?.map((theme: any) => (
-            <div key={theme._id} className="rounded-lg border border-slate-200 p-3">
+            <div key={theme._id} className="rounded-lg border border-border p-3">
               <div className="flex items-center justify-between">
                 <p className="font-medium">{theme.name}</p>
                 <Badge variant={theme.isActive ? "secondary" : "outline"}>{theme.isActive ? "Active" : "Inactive"}</Badge>
               </div>
-              {theme.description ? <p className="mt-1 text-sm text-slate-600">{theme.description}</p> : null}
+              {theme.description ? <p className="mt-1 text-sm text-muted-foreground">{theme.description}</p> : null}
             </div>
           ))}
-          {themes && themes.length === 0 ? <p className="text-sm text-slate-500">No themes yet.</p> : null}
+          {themes && themes.length === 0 ? <p className="text-sm text-muted-foreground">No themes yet.</p> : null}
         </CardContent>
       </Card>
 

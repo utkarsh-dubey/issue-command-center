@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ViewSwitcher } from "@/components/app/view-switcher";
 import { formatDueDate, relativeTime } from "@/lib/date";
 import { api } from "@/lib/convex-api";
 import { BAND_LABELS, PRIORITY_BANDS, URGENCIES, getBandLabel, getStatusLabel, getUrgencyLabel } from "@/lib/domain";
@@ -141,11 +142,14 @@ export default function PipelinePage() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-slate-200 bg-white">
+      <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-xl">Priority Pipeline</CardTitle>
-            <p className="text-xs text-slate-500">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-xl">Priority Pipeline</CardTitle>
+              <ViewSwitcher current="table" />
+            </div>
+            <p className="text-xs text-muted-foreground">
               {pipeline?.length ?? "..."} results · {activeFilterCount} active filters
             </p>
           </div>
@@ -170,7 +174,7 @@ export default function PipelinePage() {
               <DropdownMenuContent align="end" className="w-[420px] p-0">
                 <div className="space-y-4 p-4">
                   <div className="grid gap-1.5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Priority + Urgency</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Priority + Urgency</p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Select value={band} onValueChange={setBand}>
                         <SelectTrigger>
@@ -202,7 +206,7 @@ export default function PipelinePage() {
                   </div>
 
                   <div className="grid gap-1.5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Ownership + Grouping</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Ownership + Grouping</p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
                         <SelectTrigger>
@@ -252,7 +256,7 @@ export default function PipelinePage() {
                   </div>
 
                   <div className="grid gap-1.5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Scoring</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Scoring</p>
                     <div className="grid gap-2 sm:grid-cols-3">
                       <Select value={scoreFilter} onValueChange={setScoreFilter}>
                         <SelectTrigger>
@@ -280,7 +284,7 @@ export default function PipelinePage() {
                   </div>
 
                   <div className="grid gap-1.5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Time + Sorting</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Time + Sorting</p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <Select value={updatedWindow} onValueChange={setUpdatedWindow}>
                         <SelectTrigger>
@@ -350,7 +354,7 @@ export default function PipelinePage() {
                   <TableCell>{issue.customerId ? customerById.get(issue.customerId) ?? "-" : "-"}</TableCell>
                   <TableCell>{issue.themeId ? themeById.get(issue.themeId) ?? "-" : "-"}</TableCell>
                   <TableCell>
-                    <Badge className="bg-slate-900 text-white">{getBandLabel(issue.priorityBand)}</Badge>
+                    <Badge className="bg-foreground text-background">{getBandLabel(issue.priorityBand)}</Badge>
                   </TableCell>
                   <TableCell>{issue.finalPriorityScore ?? "-"}</TableCell>
                   <TableCell>{getUrgencyLabel(issue.urgency)}</TableCell>
@@ -359,12 +363,12 @@ export default function PipelinePage() {
                     <Badge variant="secondary">{getStatusLabel(issue.status)}</Badge>
                   </TableCell>
                   <TableCell>{issue.assigneeId ? userById.get(issue.assigneeId) ?? "Unknown" : "Unassigned"}</TableCell>
-                  <TableCell className="text-sm text-slate-500">{relativeTime(issue.updatedAt)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{relativeTime(issue.updatedAt)}</TableCell>
                 </TableRow>
               ))}
               {pipeline && pipeline.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-sm text-slate-500">
+                  <TableCell colSpan={10} className="text-center text-sm text-muted-foreground">
                     {activeStage === "all"
                       ? "No issues match current filters."
                       : `No ${getStatusLabel(activeStage).toLowerCase()} issues match current filters.`}

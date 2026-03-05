@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, CopyCheck } from "lucide-react";
+import { ArrowLeft, Clock, CopyCheck, Link2, Lock, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor, type RichTextEditorHandle } from "@/components/editor/rich-text-editor";
+import { WatchToggle } from "@/components/issues/watch-toggle";
+import { PresenceIndicator } from "@/components/app/presence-indicator";
+import { ReactionPicker } from "@/components/comments/reaction-picker";
 import { formatDueDate, relativeTime } from "@/lib/date";
 import { api } from "@/lib/convex-api";
 import {
@@ -55,6 +59,11 @@ export default function IssueDetailPage() {
   const customers = useQuery(api.customers.list, {});
   const data = useQuery(api.issues.getById, { issueId });
   const duplicates = useQuery(api.issues.findDuplicateCandidates, { issueId });
+  const dependencies = useQuery(api.dependencies.listForIssue, { issueId });
+  const milestones = useQuery(api.milestones.list, {});
+  const sprints = useQuery(api.sprints.list, {});
+  const goals = useQuery(api.goals.list, {});
+  const timeEntries = useQuery(api.timeTracking.listForIssue, { issueId });
 
   const updateBasics = useMutation(api.issues.updateBasics);
   const assign = useMutation(api.issues.assign);
@@ -63,6 +72,9 @@ export default function IssueDetailPage() {
   const overridePriority = useMutation(api.issues.overridePriority);
   const addComment = useMutation(api.comments.add);
   const mergeDuplicate = useMutation(api.issues.mergeDuplicate);
+  const addDependency = useMutation(api.dependencies.create);
+  const removeDependency = useMutation(api.dependencies.remove);
+  const logTime = useMutation(api.timeTracking.log);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -84,13 +96,26 @@ export default function IssueDetailPage() {
   const [overrideBand, setOverrideBand] = useState("p3");
   const [overrideReason, setOverrideReason] = useState("");
 
-  const [comment, setComment] = useState("");
+  const [commentHtml, setCommentHtml] = useState("");
+  const commentEditorRef = useRef<RichTextEditorHandle>(null);
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
   const [hydratedIssueId, setHydratedIssueId] = useState<string | null>(null);
   const [detailsSaveState, setDetailsSaveState] = useState<AutoSaveState>("idle");
   const [scoreSaveState, setScoreSaveState] = useState<AutoSaveState>("idle");
   const lastSavedBasicsRef = useRef("");
   const lastSavedRiceRef = useRef("");
+
+  // Time tracking state
+  const [timeMinutes, setTimeMinutes] = useState("");
+  const [timeDescription, setTimeDescription] = useState("");
+
+  // Dependency add state
+  const [depSearch, setDepSearch] = useState("");
+  const [depType, setDepType] = useState<"blocks" | "relates_to">("blocks");
+  const depSearchResults = useQuery(
+    api.issues.globalSearch,
+    depSearch.length >= 2 ? { query: depSearch, limit: 5 } : "skip",
+  );
 
   const issue = data?.issue;
 
@@ -283,19 +308,22 @@ export default function IssueDetailPage() {
     }
   };
 
-  const onComment = async () => {
-    if (!comment.trim() || isCommentSubmitting) return;
+  const onComment = useCallback(async () => {
+    const isEmpty = commentEditorRef.current?.isEmpty() ?? true;
+    if (isEmpty || isCommentSubmitting) return;
+    const body = commentEditorRef.current?.getHTML() ?? "";
     try {
       setIsCommentSubmitting(true);
-      await addComment({ issueId, body: comment, mentionUserIds: [] });
-      setComment("");
+      await addComment({ issueId, body, mentionUserIds: [] });
+      commentEditorRef.current?.clearContent();
+      setCommentHtml("");
       toast.success("Comment added");
     } catch (err) {
       toast.error(getErrorMessage(err, "Unable to add comment."));
     } finally {
       setIsCommentSubmitting(false);
     }
-  };
+  }, [addComment, isCommentSubmitting, issueId]);
 
   const onMergeDuplicate = async (targetIssueId: string) => {
     try {
@@ -311,8 +339,51 @@ export default function IssueDetailPage() {
     }
   };
 
+  const onAddDependency = async (targetIssueId: string) => {
+    try {
+      await addDependency({
+        blockingIssueId: issueId,
+        blockedIssueId: targetIssueId,
+        dependencyType: depType,
+      });
+      setDepSearch("");
+      toast.success("Dependency added");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Unable to add dependency."));
+    }
+  };
+
+  const onRemoveDependency = async (depId: string) => {
+    try {
+      await removeDependency({ dependencyId: depId });
+      toast.success("Dependency removed");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Unable to remove dependency."));
+    }
+  };
+
+  const onLogTime = async () => {
+    const mins = Number(timeMinutes);
+    if (!mins || mins <= 0) return;
+    try {
+      await logTime({
+        issueId,
+        durationMinutes: mins,
+        description: timeDescription || undefined,
+        date: new Date().toISOString().split("T")[0],
+      });
+      setTimeMinutes("");
+      setTimeDescription("");
+      toast.success("Time logged");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Unable to log time."));
+    }
+  };
+
+  const isBlocked = (dependencies?.blockedBy ?? []).length > 0;
+
   if (!data) {
-    return <div className="p-6 text-sm text-slate-500">Loading issue...</div>;
+    return <div className="p-6 text-sm text-muted-foreground">Loading issue...</div>;
   }
 
   return (
@@ -325,7 +396,15 @@ export default function IssueDetailPage() {
           </Link>
         </Button>
         <div className="flex items-center gap-2">
-          <Badge className="bg-slate-900 text-white">{getBandLabel(issue.priorityBand)}</Badge>
+          <PresenceIndicator issueId={issueId} />
+          <WatchToggle issueId={issueId} />
+          {isBlocked ? (
+            <Badge variant="destructive">
+              <Lock className="mr-1 h-3 w-3" />
+              Blocked
+            </Badge>
+          ) : null}
+          <Badge className="bg-foreground text-background">{getBandLabel(issue.priorityBand)}</Badge>
           <Badge variant="secondary">{getStatusLabel(issue.status)}</Badge>
           {issue.customerId ? (
             <Badge variant="outline">{customers?.find((customer: any) => customer._id === issue.customerId)?.name ?? "Customer"}</Badge>
@@ -339,7 +418,7 @@ export default function IssueDetailPage() {
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <CardTitle>Issue Details</CardTitle>
-              <p className="text-xs text-slate-500">{getAutoSaveLabel(detailsSaveState)}</p>
+              <p className="text-xs text-muted-foreground">{getAutoSaveLabel(detailsSaveState)}</p>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -362,39 +441,41 @@ export default function IssueDetailPage() {
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label>Theme</Label>
-              <Select value={themeId} onValueChange={setThemeId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No theme</SelectItem>
-                  {(themes ?? []).map((theme: any) => (
-                    <SelectItem key={theme._id} value={theme._id}>
-                      {theme.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label>Theme</Label>
+                <Select value={themeId} onValueChange={setThemeId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No theme</SelectItem>
+                    {(themes ?? []).map((theme: any) => (
+                      <SelectItem key={theme._id} value={theme._id}>
+                        {theme.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="grid gap-2">
-              <Label>Customer</Label>
-              <Select value={customerId} onValueChange={setCustomerId}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No customer</SelectItem>
-                  {(customers ?? []).map((customer: any) => (
-                    <SelectItem key={customer._id} value={customer._id}>
-                      {customer.name}
-                      {customer.isActive ? "" : " (Inactive)"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid gap-2">
+                <Label>Customer</Label>
+                <Select value={customerId} onValueChange={setCustomerId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No customer</SelectItem>
+                    {(customers ?? []).map((customer: any) => (
+                      <SelectItem key={customer._id} value={customer._id}>
+                        {customer.name}
+                        {customer.isActive ? "" : " (Inactive)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid gap-2">
@@ -439,10 +520,84 @@ export default function IssueDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ISSUE_STATUSES.map((statusValue) => (
-                      <SelectItem key={statusValue} value={statusValue}>
-                        {STATUS_LABELS[statusValue]}
+                    {ISSUE_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {STATUS_LABELS[s]}
                       </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label>Milestone</Label>
+                  <Select
+                    value={issue.milestoneId ?? "none"}
+                    onValueChange={async (v) => {
+                      try {
+                        await updateBasics({ issueId, milestoneId: v === "none" ? null : v } as any);
+                      } catch (err) {
+                        toast.error(getErrorMessage(err, "Unable to set milestone."));
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No milestone</SelectItem>
+                      {(milestones ?? []).map((m: any) => (
+                        <SelectItem key={m._id} value={m._id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Sprint</Label>
+                  <Select
+                    value={issue.sprintId ?? "none"}
+                    onValueChange={async (v) => {
+                      try {
+                        await updateBasics({ issueId, sprintId: v === "none" ? null : v } as any);
+                      } catch (err) {
+                        toast.error(getErrorMessage(err, "Unable to set sprint."));
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No sprint</SelectItem>
+                      {(sprints ?? []).map((s: any) => (
+                        <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label>Goal</Label>
+                <Select
+                  value={issue.goalId ?? "none"}
+                  onValueChange={async (v) => {
+                    try {
+                      await updateBasics({ issueId, goalId: v === "none" ? null : v } as any);
+                    } catch (err) {
+                      toast.error(getErrorMessage(err, "Unable to set goal."));
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No goal</SelectItem>
+                    {(goals ?? []).map((g: any) => (
+                      <SelectItem key={g._id} value={g._id}>{g.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -454,7 +609,7 @@ export default function IssueDetailPage() {
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>RICE + Urgency</CardTitle>
-                <p className="text-xs text-slate-500">{getAutoSaveLabel(scoreSaveState)}</p>
+                <p className="text-xs text-muted-foreground">{getAutoSaveLabel(scoreSaveState)}</p>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -494,11 +649,11 @@ export default function IssueDetailPage() {
               </div>
 
               {calculated ? (
-                <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-950">
+                <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-950 dark:border-cyan-800 dark:bg-cyan-950 dark:text-cyan-200">
                   Preview Score: {calculated.finalPriorityScore} ({BAND_LABELS[calculated.priorityBand]})
                 </div>
               ) : (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                <div className="rounded-lg border border-border bg-muted p-3 text-sm text-muted-foreground">
                   Enter valid values from 1-5 to compute preview.
                 </div>
               )}
@@ -538,19 +693,119 @@ export default function IssueDetailPage() {
         </div>
       </div>
 
+      {/* Dependencies */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Link2 className="h-4 w-4" />
+            Dependencies
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-2 text-sm font-medium">Blocks</p>
+              <div className="space-y-1">
+                {(dependencies?.blocks ?? []).map((dep: any) => (
+                  <div key={dep.dependencyId} className="flex items-center justify-between rounded border border-border p-2 text-sm">
+                    <Link href={`/issues/${dep.issueId}`} className="hover:underline truncate">
+                      {dep.title}
+                    </Link>
+                    <Button variant="ghost" size="sm" onClick={() => onRemoveDependency(dep.dependencyId)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+                {(dependencies?.blocks ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Not blocking anything</p>
+                ) : null}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-medium">Blocked by</p>
+              <div className="space-y-1">
+                {(dependencies?.blockedBy ?? []).map((dep: any) => (
+                  <div key={dep.dependencyId} className="flex items-center justify-between rounded border border-destructive/30 bg-destructive/5 p-2 text-sm">
+                    <Link href={`/issues/${dep.issueId}`} className="hover:underline truncate">
+                      {dep.title}
+                    </Link>
+                    <Button variant="ghost" size="sm" onClick={() => onRemoveDependency(dep.dependencyId)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+                {(dependencies?.blockedBy ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Not blocked by anything</p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          {(dependencies?.relatesTo ?? []).length > 0 ? (
+            <div>
+              <p className="mb-2 text-sm font-medium">Related</p>
+              <div className="space-y-1">
+                {dependencies.relatesTo.map((dep: any) => (
+                  <div key={dep.dependencyId} className="flex items-center justify-between rounded border border-border p-2 text-sm">
+                    <Link href={`/issues/${dep.issueId}`} className="hover:underline truncate">
+                      {dep.title}
+                    </Link>
+                    <Button variant="ghost" size="sm" onClick={() => onRemoveDependency(dep.dependencyId)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <Separator />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Label>Add dependency</Label>
+              <Input
+                placeholder="Search issues..."
+                value={depSearch}
+                onChange={(e) => setDepSearch(e.target.value)}
+              />
+            </div>
+            <Select value={depType} onValueChange={(v: any) => setDepType(v)}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="blocks">Blocks</SelectItem>
+                <SelectItem value="relates_to">Relates to</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {depSearchResults && depSearchResults.length > 0 ? (
+            <div className="space-y-1">
+              {depSearchResults.filter((r: any) => r._id !== issueId).map((result: any) => (
+                <div key={result._id} className="flex items-center justify-between rounded border border-border p-2 text-sm">
+                  <span className="truncate">{result.title}</span>
+                  <Button size="sm" variant="outline" onClick={() => onAddDependency(result._id)}>
+                    <Plus className="mr-1 h-3 w-3" /> Add
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Duplicate Suggestions */}
       <Card>
         <CardHeader>
           <CardTitle>Duplicate Suggestions</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {(duplicates ?? []).length === 0 ? (
-            <p className="text-sm text-slate-500">No likely duplicates above 0.55 similarity.</p>
+            <p className="text-sm text-muted-foreground">No likely duplicates above 0.55 similarity.</p>
           ) : (
             (duplicates ?? []).map((candidate: any) => (
-              <div key={candidate.issueId} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+              <div key={candidate.issueId} className="flex items-center justify-between rounded-lg border border-border p-3">
                 <div>
                   <p className="font-medium">{candidate.title}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     Similarity: {candidate.similarity} · Status: {getStatusLabel(candidate.status)}
                   </p>
                 </div>
@@ -572,53 +827,107 @@ export default function IssueDetailPage() {
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
+        {/* Comments */}
         <Card>
           <CardHeader>
             <CardTitle>Comments</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Textarea
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-              placeholder="Add a comment (Enter to post, Cmd/Ctrl+Enter for new line)"
-              rows={3}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-                if (event.metaKey || event.ctrlKey) return;
-                event.preventDefault();
-                void onComment();
-              }}
+            <RichTextEditor
+              ref={commentEditorRef}
+              placeholder="Add a comment..."
+              onChange={setCommentHtml}
             />
-            <Button onClick={onComment} disabled={!comment.trim() || isCommentSubmitting}>
+            <Button onClick={onComment} disabled={!commentHtml.trim() || isCommentSubmitting}>
               {isCommentSubmitting ? "Posting..." : "Post Comment"}
             </Button>
             <Separator />
             <div className="space-y-3">
               {data.comments.map((entry: any) => (
-                <div key={entry._id} className="rounded-lg border border-slate-200 p-3">
-                  <p className="text-sm">{entry.body}</p>
-                  <p className="mt-1 text-xs text-slate-500">{relativeTime(entry.createdAt)}</p>
+                <div key={entry._id} className="rounded-lg border border-border p-3">
+                  <div
+                    className="prose prose-sm dark:prose-invert max-w-none text-sm"
+                    dangerouslySetInnerHTML={{ __html: entry.body }}
+                  />
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground">{relativeTime(entry.createdAt)}</p>
+                    {entry.editedAt ? <p className="text-xs text-muted-foreground">(edited)</p> : null}
+                    <ReactionPicker commentId={entry._id} reactions={entry.reactions ?? []} />
+                  </div>
                 </div>
               ))}
-              {data.comments.length === 0 ? <p className="text-sm text-slate-500">No comments yet.</p> : null}
+              {data.comments.length === 0 ? <p className="text-sm text-muted-foreground">No comments yet.</p> : null}
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Activity Log</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {data.events.map((event: any) => (
-              <div key={event._id} className="rounded-lg border border-slate-200 p-3">
-                <p className="text-sm font-medium">{event.eventType.replaceAll("_", " ")}</p>
-                <p className="text-xs text-slate-500">{relativeTime(event.createdAt)}</p>
+        {/* Time Tracking + Activity */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Time Tracking
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-end gap-2">
+                <div className="grid gap-1.5">
+                  <Label>Minutes</Label>
+                  <Input
+                    type="number"
+                    value={timeMinutes}
+                    onChange={(e) => setTimeMinutes(e.target.value)}
+                    placeholder="30"
+                    className="w-24"
+                  />
+                </div>
+                <div className="flex-1 grid gap-1.5">
+                  <Label>Description</Label>
+                  <Input
+                    value={timeDescription}
+                    onChange={(e) => setTimeDescription(e.target.value)}
+                    placeholder="What did you work on?"
+                  />
+                </div>
+                <Button onClick={onLogTime} disabled={!timeMinutes || Number(timeMinutes) <= 0}>
+                  Log
+                </Button>
               </div>
-            ))}
-            {data.events.length === 0 ? <p className="text-sm text-slate-500">No activity yet.</p> : null}
-          </CardContent>
-        </Card>
+              {(timeEntries ?? []).length > 0 ? (
+                <>
+                  <Separator />
+                  <div className="space-y-1">
+                    {(timeEntries ?? []).map((entry: any) => (
+                      <div key={entry._id} className="flex items-center justify-between text-sm">
+                        <span>{entry.durationMinutes}m — {entry.description || "No description"}</span>
+                        <span className="text-xs text-muted-foreground">{entry.date}</span>
+                      </div>
+                    ))}
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Total: {(timeEntries ?? []).reduce((sum: number, e: any) => sum + e.durationMinutes, 0)}m
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Activity Log</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {data.events.map((event: any) => (
+                <div key={event._id} className="rounded-lg border border-border p-3">
+                  <p className="text-sm font-medium">{event.eventType.replaceAll("_", " ")}</p>
+                  <p className="text-xs text-muted-foreground">{relativeTime(event.createdAt)}</p>
+                </div>
+              ))}
+              {data.events.length === 0 ? <p className="text-sm text-muted-foreground">No activity yet.</p> : null}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
