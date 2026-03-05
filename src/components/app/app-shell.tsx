@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { Menu, Moon, Sun } from "lucide-react";
@@ -12,7 +12,9 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { CommandPalette } from "@/components/app/command-palette";
 import { NotificationCenter } from "@/components/app/notification-center";
 import { SidebarNav } from "@/components/app/sidebar-nav";
+import { CreateIssueDialog } from "@/components/issues/create-issue-dialog";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcut";
+import type { IssueStatus } from "@/lib/domain";
 
 export function AppShell({
   role,
@@ -26,14 +28,22 @@ export function AppShell({
   const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
 
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDialogDefaultStatus, setCreateDialogDefaultStatus] = useState<IssueStatus>("inbox");
+
+  const openCreateDialog = useCallback((status: IssueStatus = "inbox") => {
+    setCreateDialogDefaultStatus(status);
+    setCreateDialogOpen(true);
+  }, []);
+
   const shortcuts = useMemo(
     () => [
-      { key: "n", meta: true, callback: () => router.push("/inbox"), preventDefault: true },
+      { key: "i", meta: true, callback: () => openCreateDialog(), preventDefault: true },
       { key: "1", meta: true, callback: () => router.push("/inbox"), preventDefault: true },
       { key: "2", meta: true, callback: () => router.push("/pipeline"), preventDefault: true },
       { key: "3", meta: true, callback: () => router.push("/board"), preventDefault: true },
     ],
-    [router],
+    [router, openCreateDialog],
   );
 
   useKeyboardShortcuts(shortcuts);
@@ -43,8 +53,8 @@ export function AppShell({
   }, [resolvedTheme, setTheme]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-border bg-card/90 backdrop-blur">
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <header className="z-20 shrink-0 border-b border-border bg-card/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-4 py-3 md:px-6">
           <div className="flex items-center gap-3">
             <Sheet>
@@ -55,7 +65,7 @@ export function AppShell({
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-3">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
-                <SidebarNav />
+                <SidebarNav onCreateIssue={openCreateDialog} />
               </SheetContent>
             </Sheet>
             <div className="rounded-md bg-primary px-2 py-1 text-xs font-bold tracking-[0.14em] text-primary-foreground">
@@ -82,14 +92,19 @@ export function AppShell({
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1440px] grid-cols-1 gap-6 px-4 py-6 md:grid-cols-[240px_1fr] md:px-6">
-        <aside className="hidden rounded-2xl border border-border bg-card p-3 md:block">
-          <SidebarNav />
+      <div className="mx-auto grid w-full min-h-0 flex-1 max-w-[1440px] grid-cols-1 gap-6 px-4 py-6 md:grid-cols-[240px_1fr] md:px-6">
+        <aside className="hidden overflow-y-auto rounded-2xl border border-border bg-card p-3 md:block">
+          <SidebarNav onCreateIssue={openCreateDialog} />
         </aside>
-        <main className="min-h-[70vh]">{children}</main>
+        <main className="overflow-y-auto">{children}</main>
       </div>
 
-      <CommandPalette />
+      <CommandPalette onCreateIssue={openCreateDialog} />
+      <CreateIssueDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        defaultStatus={createDialogDefaultStatus}
+      />
     </div>
   );
 }

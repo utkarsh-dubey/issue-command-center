@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
-import { ArrowRight, CheckCircle } from "lucide-react";
+import { ArrowRight, Calendar, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,12 @@ export default function MyWorkPage() {
         <div className="mt-1 flex items-center gap-2">
           <Badge variant="secondary" className="text-xs">{getBandLabel(issue.priorityBand)}</Badge>
           <span className="text-xs text-muted-foreground">{relativeTime(issue.updatedAt)}</span>
+          {issue.dueDate ? (
+            <span className={`flex items-center gap-1 text-xs ${issue.dueDate < new Date().toISOString().slice(0, 10) && issue.status !== "done" ? "text-destructive" : "text-muted-foreground"}`}>
+              <Calendar className="h-3 w-3" />
+              {issue.dueDate}
+            </span>
+          ) : null}
         </div>
       </div>
       {actions ? <div className="ml-3 flex items-center gap-2">{actions}</div> : null}

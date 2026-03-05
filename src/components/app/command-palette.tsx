@@ -30,7 +30,7 @@ import {
 import { api } from "@/lib/convex-api";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 
-export function CommandPalette() {
+export function CommandPalette({ onCreateIssue }: { onCreateIssue?: () => void }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const router = useRouter();
@@ -113,10 +113,15 @@ export function CommandPalette() {
         ) : null}
 
         <CommandGroup heading="Actions">
-          <CommandItem onSelect={() => navigate("/inbox")}>
+          <CommandItem
+            onSelect={() => {
+              setOpen(false);
+              onCreateIssue?.();
+            }}
+          >
             <PlusCircle className="mr-2 h-4 w-4" />
             Create Issue
-            <CommandShortcut>Cmd+N</CommandShortcut>
+            <CommandShortcut>Cmd+I</CommandShortcut>
           </CommandItem>
           <CommandItem
             onSelect={() => {

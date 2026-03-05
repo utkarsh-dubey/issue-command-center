@@ -127,17 +127,21 @@ export const create = mutation({
   args: {
     title: v.string(),
     description: v.optional(v.string()),
+    status: v.optional(
+      v.union(v.literal("inbox"), v.literal("triage"), v.literal("planned"), v.literal("doing"), v.literal("done")),
+    ),
   },
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
     assertCanCreateOrEdit(user);
 
+    const status = args.status ?? "inbox";
     const now = Date.now();
     const issueId = await ctx.db.insert("issues", {
       title: args.title.trim(),
       description: args.description?.trim(),
       source: "manual",
-      status: "inbox",
+      status,
       reporterId: user._id,
       evidenceLinks: [],
       urgency: "none",
@@ -154,7 +158,7 @@ export const create = mutation({
       eventType: "issue_created",
       after: {
         title: args.title.trim(),
-        status: "inbox",
+        status,
       },
     });
 

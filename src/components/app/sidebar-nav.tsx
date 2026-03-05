@@ -16,6 +16,7 @@ import {
   ListTodo,
   Map,
   Palette,
+  Plus,
   Settings,
   Table2,
   Target,
@@ -24,7 +25,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import { getStatusLabel } from "@/lib/domain";
+import { getStatusLabel, type IssueStatus } from "@/lib/domain";
 import { PIPELINE_STAGES, getPipelineStageHref, isPipelineStage } from "@/lib/pipeline";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +74,7 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function SidebarNav() {
+export function SidebarNav({ onCreateIssue }: { onCreateIssue?: (status: IssueStatus) => void }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isPipelineView = pathname === "/pipeline";
@@ -132,18 +133,29 @@ export function SidebarNav() {
                         {(["all", ...PIPELINE_STAGES] as const).map((stage) => {
                           const stageActive = isPipelineView && activePipelineStage === stage;
                           return (
-                            <Link
-                              key={stage}
-                              href={getPipelineStageHref(stage)}
-                              className={cn(
-                                "flex items-center rounded-lg px-3 py-1.5 text-sm transition",
-                                stageActive
-                                  ? "bg-primary text-primary-foreground"
-                                  : "text-muted-foreground hover:bg-muted",
-                              )}
-                            >
-                              {stage === "all" ? "All" : getStatusLabel(stage)}
-                            </Link>
+                            <div key={stage} className="group flex items-center">
+                              <Link
+                                href={getPipelineStageHref(stage)}
+                                className={cn(
+                                  "flex min-w-0 flex-1 items-center rounded-lg px-3 py-1.5 text-sm transition",
+                                  stageActive
+                                    ? "bg-primary text-primary-foreground"
+                                    : "text-muted-foreground hover:bg-muted",
+                                )}
+                              >
+                                {stage === "all" ? "All" : getStatusLabel(stage)}
+                              </Link>
+                              {stage !== "all" && onCreateIssue ? (
+                                <button
+                                  type="button"
+                                  className="ml-auto mr-1 rounded-md p-0.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                                  onClick={() => onCreateIssue(stage)}
+                                  title={`Create issue in ${getStatusLabel(stage)}`}
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
+                            </div>
                           );
                         })}
                       </div>
