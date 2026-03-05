@@ -96,7 +96,7 @@ export function AppShell({
         <aside className="hidden overflow-y-auto rounded-2xl border border-border bg-card p-3 md:block">
           <SidebarNav onCreateIssue={openCreateDialog} />
         </aside>
-        <main className="overflow-y-auto">{children}</main>
+        <main className="min-h-0 overflow-y-auto">{children}</main>
       </div>
 
       <CommandPalette onCreateIssue={openCreateDialog} />

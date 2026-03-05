@@ -28,10 +28,21 @@ const TRIGGERS = [
 ];
 
 export default function AutomationPage() {
-  const rules = useQuery(api.automations.listRules, {});
-  const logs = useQuery(api.automations.listLogs, { limit: 20 });
+  const me = useQuery(api.users.me, {});
+  const isAdmin = me?.role === "admin";
+  const rules = useQuery(api.automations.listRules, isAdmin ? {} : "skip");
+  const logs = useQuery(api.automations.listLogs, isAdmin ? { limit: 20 } : "skip");
   const createRule = useMutation(api.automations.createRule);
   const updateRule = useMutation(api.automations.updateRule);
+
+  if (me && !isAdmin) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold">Automation</h1>
+        <Card><CardContent className="pt-4"><p className="text-sm text-muted-foreground">Only admins can manage automation rules.</p></CardContent></Card>
+      </div>
+    );
+  }
 
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");

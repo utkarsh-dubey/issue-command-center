@@ -686,8 +686,23 @@ export const listKanban = query({
       return true;
     });
 
+    // Join assignee and theme names for card display
+    const enriched = await Promise.all(
+      filtered.map(async (issue) => {
+        const assignee = issue.assigneeId ? await ctx.db.get(issue.assigneeId) : null;
+        const theme = issue.themeId ? await ctx.db.get(issue.themeId) : null;
+        const customer = issue.customerId ? await ctx.db.get(issue.customerId) : null;
+        return {
+          ...issue,
+          assigneeName: assignee?.name ?? null,
+          themeName: theme?.name ?? null,
+          customerName: customer?.name ?? null,
+        };
+      }),
+    );
+
     const columns: Record<string, any[]> = { triage: [], planned: [], doing: [], done: [] };
-    for (const issue of filtered) {
+    for (const issue of enriched) {
       if (columns[issue.status]) {
         columns[issue.status].push(issue);
       }

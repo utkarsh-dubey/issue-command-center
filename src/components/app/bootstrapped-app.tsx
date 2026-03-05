@@ -59,7 +59,7 @@ export function BootstrappedApp({ children }: { children: React.ReactNode }) {
     };
   }, [ensureSelf, isLoaded, isSignedIn, isConvexAuthLoading, isAuthenticated, ready]);
 
-  const me = useQuery(api.users.me, ready ? {} : "skip");
+  const me = useQuery(api.users.me, ready && isAuthenticated ? {} : "skip");
   const showSetupHelp = isLoaded && isSignedIn && !isConvexAuthLoading && !isAuthenticated;
 
   if (showSetupHelp) {

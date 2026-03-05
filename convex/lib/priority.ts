@@ -33,10 +33,10 @@ export function bandFromScore(score: number): PriorityBand {
 
 const TRANSITIONS: Record<IssueStatus, IssueStatus[]> = {
   inbox: ["triage"],
-  triage: ["inbox", "planned"],
-  planned: ["triage", "doing"],
-  doing: ["planned", "done"],
-  done: ["doing"],
+  triage: ["inbox", "planned", "doing", "done"],
+  planned: ["triage", "doing", "done"],
+  doing: ["triage", "planned", "done"],
+  done: ["triage", "planned", "doing"],
 };
 
 export function canTransition(from: IssueStatus, to: IssueStatus) {
