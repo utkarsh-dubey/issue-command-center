@@ -17,6 +17,13 @@ import { api } from "@/lib/convex-api";
 import { getStatusLabel, getUrgencyLabel } from "@/lib/domain";
 import { getErrorMessage } from "@/lib/errors";
 
+const SOURCE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+  portal: { label: "Portal", variant: "default" },
+  manual: { label: "Manual", variant: "secondary" },
+  template: { label: "Template", variant: "secondary" },
+  automation: { label: "Automation", variant: "secondary" },
+};
+
 export default function InboxPage() {
   const me = useQuery(api.users.me, {});
   const [search, setSearch] = useState("");
@@ -116,7 +123,7 @@ export default function InboxPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Title</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Source</TableHead>
                 <TableHead>Urgency</TableHead>
                 <TableHead>Updated</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -128,9 +135,17 @@ export default function InboxPage() {
                   <TableCell>
                     <div className="font-medium">{issue.title}</div>
                     {issue.description ? <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{issue.description}</p> : null}
+                    {issue.submitterName ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        from {issue.submitterName} ({issue.submitterEmail})
+                        {issue.submitterCompany ? ` · ${issue.submitterCompany}` : ""}
+                      </p>
+                    ) : null}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{getStatusLabel(issue.status)}</Badge>
+                    <Badge variant={SOURCE_LABELS[issue.source]?.variant ?? "outline"}>
+                      {SOURCE_LABELS[issue.source]?.label ?? issue.source}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">{getUrgencyLabel(issue.urgency)}</Badge>

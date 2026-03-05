@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, Clock, CopyCheck, Link2, Lock, Plus, X } from "lucide-react";
+import { ArrowLeft, Clock, CopyCheck, Globe, Link2, Lock, Plus, User, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -412,6 +412,40 @@ export default function IssueDetailPage() {
           {issue.dueDate ? <Badge variant="outline">Due {formatDueDate(issue.dueDate)}</Badge> : null}
         </div>
       </div>
+
+      {/* Source & Submitter Info */}
+      {issue.source === "portal" && issue.submitterName ? (
+        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/30">
+          <CardContent className="flex items-center gap-4 py-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
+              <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                Submitted via public portal by{" "}
+                <span className="font-semibold">{issue.submitterName}</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {issue.submitterEmail}
+                {issue.submitterCompany ? ` · ${issue.submitterCompany}` : ""}
+                {issue.submissionType ? ` · ${issue.submissionType === "feature_request" ? "Feature Request" : "Bug Report"}` : ""}
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0 border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
+              Portal
+            </Badge>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <User className="h-3.5 w-3.5" />
+          <span>
+            Created{data.reporterName ? ` by ${data.reporterName}` : ""}
+            {" · "}
+            {issue.source === "manual" ? "Manual" : issue.source === "template" ? "Template" : issue.source === "automation" ? "Automation" : issue.source}
+          </span>
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card>
@@ -921,6 +955,11 @@ export default function IssueDetailPage() {
               {data.events.map((event: any) => (
                 <div key={event._id} className="rounded-lg border border-border p-3">
                   <p className="text-sm font-medium">{event.eventType.replaceAll("_", " ")}</p>
+                  {event.after?.source === "portal" && event.after?.submitterName ? (
+                    <p className="text-xs text-muted-foreground">
+                      by {event.after.submitterName} ({event.after.submitterEmail}) via portal
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">{relativeTime(event.createdAt)}</p>
                 </div>
               ))}

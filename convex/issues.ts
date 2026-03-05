@@ -288,8 +288,11 @@ export const getById = query({
       .order("desc")
       .take(100);
 
+    const reporter = issue.reporterId ? await ctx.db.get(issue.reporterId) : null;
+
     return {
       issue,
+      reporterName: reporter?.name ?? null,
       comments,
       events,
     };

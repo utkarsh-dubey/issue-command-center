@@ -55,7 +55,8 @@ export default defineSchema({
     .index("by_nameLower", ["nameLower"])
     .index("by_active", ["isActive"])
     .index("by_tier", ["tier"])
-    .index("by_healthScore", ["healthScore"]),
+    .index("by_healthScore", ["healthScore"])
+    .index("by_domain", ["domain"]),
 
   issues: defineTable({
     title: v.string(),
@@ -70,7 +71,11 @@ export default defineSchema({
     ),
     themeId: v.optional(v.id("themes")),
     customerId: v.optional(v.id("customers")),
-    reporterId: v.id("users"),
+    reporterId: v.optional(v.id("users")),
+    submitterName: v.optional(v.string()),
+    submitterEmail: v.optional(v.string()),
+    submitterCompany: v.optional(v.string()),
+    submissionType: v.optional(v.union(v.literal("feature_request"), v.literal("bug_report"))),
     assigneeId: v.optional(v.id("users")),
     evidenceLinks: v.array(v.string()),
     urgency: v.union(

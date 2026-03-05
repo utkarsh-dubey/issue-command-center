@@ -27,6 +27,7 @@ import type * as lib_priority from "../lib/priority.js";
 import type * as milestones from "../milestones.js";
 import type * as notifications from "../notifications.js";
 import type * as oncall from "../oncall.js";
+import type * as portal from "../portal.js";
 import type * as presence from "../presence.js";
 import type * as reactions from "../reactions.js";
 import type * as settings from "../settings.js";
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   milestones: typeof milestones;
   notifications: typeof notifications;
   oncall: typeof oncall;
+  portal: typeof portal;
   presence: typeof presence;
   reactions: typeof reactions;
   settings: typeof settings;
