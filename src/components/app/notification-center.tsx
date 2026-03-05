@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { Bell, Check } from "lucide-react";
@@ -12,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/lib/convex-api";
 import { relativeTime } from "@/lib/date";
 
-export function NotificationCenter() {
+export const NotificationCenter = memo(function NotificationCenter() {
   const router = useRouter();
   const unreadCount = useQuery(api.notifications.getUnreadCount, {});
   const notifications = useQuery(api.notifications.listForUser, { limit: 20 });
@@ -83,4 +84,4 @@ export function NotificationCenter() {
       </PopoverContent>
     </Popover>
   );
-}
+});

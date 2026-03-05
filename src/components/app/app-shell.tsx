@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { Menu, Moon, Sun } from "lucide-react";
@@ -27,6 +27,7 @@ export function AppShell({
 }) {
   const router = useRouter();
   const { setTheme, resolvedTheme } = useTheme();
+  const [, startTransition] = useTransition();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDialogDefaultStatus, setCreateDialogDefaultStatus] = useState<IssueStatus>("inbox");
@@ -36,14 +37,19 @@ export function AppShell({
     setCreateDialogOpen(true);
   }, []);
 
+  const navigate = useCallback(
+    (path: string) => startTransition(() => router.push(path)),
+    [router],
+  );
+
   const shortcuts = useMemo(
     () => [
       { key: "i", meta: true, callback: () => openCreateDialog(), preventDefault: true },
-      { key: "1", meta: true, callback: () => router.push("/inbox"), preventDefault: true },
-      { key: "2", meta: true, callback: () => router.push("/pipeline"), preventDefault: true },
-      { key: "3", meta: true, callback: () => router.push("/board"), preventDefault: true },
+      { key: "1", meta: true, callback: () => navigate("/inbox"), preventDefault: true },
+      { key: "2", meta: true, callback: () => navigate("/pipeline"), preventDefault: true },
+      { key: "3", meta: true, callback: () => navigate("/board"), preventDefault: true },
     ],
-    [router, openCreateDialog],
+    [navigate, openCreateDialog],
   );
 
   useKeyboardShortcuts(shortcuts);
@@ -65,7 +71,9 @@ export function AppShell({
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-3">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
-                <SidebarNav onCreateIssue={openCreateDialog} />
+                <Suspense>
+                  <SidebarNav onCreateIssue={openCreateDialog} />
+                </Suspense>
               </SheetContent>
             </Sheet>
             <div className="rounded-md bg-primary px-2 py-1 text-xs font-bold tracking-[0.14em] text-primary-foreground">
@@ -94,7 +102,9 @@ export function AppShell({
 
       <div className="mx-auto grid w-full min-h-0 flex-1 max-w-[1440px] grid-cols-1 gap-6 px-4 py-6 md:grid-cols-[240px_1fr] md:px-6">
         <aside className="hidden overflow-y-auto rounded-2xl border border-border bg-card p-3 md:block">
-          <SidebarNav onCreateIssue={openCreateDialog} />
+          <Suspense>
+            <SidebarNav onCreateIssue={openCreateDialog} />
+          </Suspense>
         </aside>
         <main className="min-h-0 overflow-y-auto">{children}</main>
       </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { memo, useState, useEffect } from "react";
 import {
   Activity,
   BarChart3,
@@ -74,18 +74,64 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function SidebarNav({ onCreateIssue }: { onCreateIssue?: (status: IssueStatus) => void }) {
-  const pathname = usePathname();
+/** Isolated component — owns useSearchParams so only pipeline stages re-render on query changes. */
+function PipelineStages({
+  isPipelineView,
+  onCreateIssue,
+}: {
+  isPipelineView: boolean;
+  onCreateIssue?: (status: IssueStatus) => void;
+}) {
   const searchParams = useSearchParams();
+  const stageFromQuery = searchParams.get("stage");
+  const activePipelineStage = isPipelineStage(stageFromQuery) ? stageFromQuery : "all";
+
+  return (
+    <div className="space-y-0.5 pl-6">
+      {(["all", ...PIPELINE_STAGES] as const).map((stage) => {
+        const stageActive = isPipelineView && activePipelineStage === stage;
+        return (
+          <div key={stage} className="group flex items-center">
+            <Link
+              href={getPipelineStageHref(stage)}
+              className={cn(
+                "flex min-w-0 flex-1 items-center rounded-lg px-3 py-1.5 text-sm transition",
+                stageActive
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {stage === "all" ? "All" : getStatusLabel(stage)}
+            </Link>
+            {stage !== "all" && onCreateIssue ? (
+              <button
+                type="button"
+                className="ml-auto mr-1 rounded-md p-0.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                onClick={() => onCreateIssue(stage)}
+                title={`Create issue in ${getStatusLabel(stage)}`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export const SidebarNav = memo(function SidebarNav({
+  onCreateIssue,
+}: {
+  onCreateIssue?: (status: IssueStatus) => void;
+}) {
+  const pathname = usePathname();
   const isPipelineView = pathname === "/pipeline";
   const [pipelineExpanded, setPipelineExpanded] = useState(isPipelineView);
 
   useEffect(() => {
     if (isPipelineView) setPipelineExpanded(true);
   }, [isPipelineView]);
-
-  const stageFromQuery = searchParams.get("stage");
-  const activePipelineStage = isPipelineStage(stageFromQuery) ? stageFromQuery : "all";
 
   return (
     <nav className="space-y-4">
@@ -129,36 +175,7 @@ export function SidebarNav({ onCreateIssue }: { onCreateIssue?: (status: IssueSt
                       </button>
                     </div>
                     {pipelineExpanded ? (
-                      <div className="space-y-0.5 pl-6">
-                        {(["all", ...PIPELINE_STAGES] as const).map((stage) => {
-                          const stageActive = isPipelineView && activePipelineStage === stage;
-                          return (
-                            <div key={stage} className="group flex items-center">
-                              <Link
-                                href={getPipelineStageHref(stage)}
-                                className={cn(
-                                  "flex min-w-0 flex-1 items-center rounded-lg px-3 py-1.5 text-sm transition",
-                                  stageActive
-                                    ? "bg-primary text-primary-foreground"
-                                    : "text-muted-foreground hover:bg-muted",
-                                )}
-                              >
-                                {stage === "all" ? "All" : getStatusLabel(stage)}
-                              </Link>
-                              {stage !== "all" && onCreateIssue ? (
-                                <button
-                                  type="button"
-                                  className="ml-auto mr-1 rounded-md p-0.5 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
-                                  onClick={() => onCreateIssue(stage)}
-                                  title={`Create issue in ${getStatusLabel(stage)}`}
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                </button>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <PipelineStages isPipelineView={isPipelineView} onCreateIssue={onCreateIssue} />
                     ) : null}
                   </div>
                 );
@@ -183,4 +200,4 @@ export function SidebarNav({ onCreateIssue }: { onCreateIssue?: (status: IssueSt
       ))}
     </nav>
   );
-}
+});
