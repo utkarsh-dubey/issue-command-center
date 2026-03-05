@@ -67,7 +67,7 @@ export default function InboxPage() {
   return (
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="border-cyan-100 bg-[linear-gradient(135deg,#effbff_0%,#ffffff_64%)] dark:border-cyan-900 dark:bg-[linear-gradient(135deg,oklch(0.2_0.02_220)_0%,oklch(0.19_0.01_250)_64%)]">
+        <Card className="border-primary/10 bg-[linear-gradient(135deg,oklch(0.95_0.03_220)_0%,oklch(0.99_0.006_255)_64%)] dark:border-primary/20 dark:bg-[linear-gradient(135deg,oklch(0.2_0.03_220)_0%,oklch(0.19_0.01_250)_64%)]">
           <CardHeader>
             <CardTitle className="text-xl">Triage Inbox</CardTitle>
             <p className="text-sm text-muted-foreground">

@@ -28,7 +28,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-cyan-100 bg-[linear-gradient(135deg,#ecfbff_0%,#ffffff_70%)] dark:border-cyan-900 dark:bg-[linear-gradient(135deg,oklch(0.2_0.02_220)_0%,oklch(0.19_0.01_250)_70%)]">
+      <Card className="border-primary/10 bg-[linear-gradient(135deg,oklch(0.95_0.03_220)_0%,oklch(0.99_0.006_255)_70%)] dark:border-primary/20 dark:bg-[linear-gradient(135deg,oklch(0.2_0.03_220)_0%,oklch(0.19_0.01_250)_70%)]">
         <CardHeader>
           <CardTitle>Stakeholder Dashboard</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -37,7 +37,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           {metrics.map((metric) => (
-            <div key={metric.label} className="rounded-xl border border-border bg-card p-3">
+            <div key={metric.label} className="rounded-xl border border-border bg-card/80 p-3 backdrop-blur-sm">
               <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</p>
               <p className="mt-1 text-2xl font-semibold">{metric.value}</p>
             </div>
@@ -68,7 +68,7 @@ export default function DashboardPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Badge className="bg-foreground text-background">{getBandLabel(issue.priorityBand)}</Badge>
+                      <Badge variant="secondary">{getBandLabel(issue.priorityBand)}</Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{getStatusLabel(issue.status)}</Badge>
@@ -93,8 +93,8 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {summary.recentEvents.map((event: any) => (
-              <div key={event._id} className="rounded-lg border border-border p-3">
-                <p className="text-sm font-medium">{event.eventType.replaceAll("_", " ")}</p>
+              <div key={event._id} className="rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/50">
+                <p className="text-sm font-medium capitalize">{event.eventType.replaceAll("_", " ")}</p>
                 <p className="text-xs text-muted-foreground">{relativeTime(event.createdAt)}</p>
               </div>
             ))}
