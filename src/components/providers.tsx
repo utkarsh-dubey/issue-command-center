@@ -20,14 +20,14 @@ function ClerkThemed({ children }: { children: React.ReactNode }) {
           ? {
               baseTheme: dark,
               variables: {
-                colorBackground: "oklch(0.19 0.01 250)",
-                colorInputBackground: "oklch(0.22 0.01 250)",
-                colorPrimary: "oklch(0.7 0.08 220)",
+                colorBackground: "oklch(0.21 0.006 285.885)",
+                colorInputBackground: "oklch(0.274 0.006 286.033)",
+                colorPrimary: "oklch(0.795 0.184 86.047)",
               },
             }
           : {
               variables: {
-                colorPrimary: "oklch(0.35 0.08 252)",
+                colorPrimary: "oklch(0.852 0.199 91.936)",
               },
             }
       }

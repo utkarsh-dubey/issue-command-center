@@ -33,6 +33,7 @@ import type * as reactions from "../reactions.js";
 import type * as settings from "../settings.js";
 import type * as snapshots from "../snapshots.js";
 import type * as sprints from "../sprints.js";
+import type * as subTasks from "../subTasks.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as teams from "../teams.js";
 import type * as templates from "../templates.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   settings: typeof settings;
   snapshots: typeof snapshots;
   sprints: typeof sprints;
+  subTasks: typeof subTasks;
   subscriptions: typeof subscriptions;
   teams: typeof teams;
   templates: typeof templates;

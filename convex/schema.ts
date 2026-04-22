@@ -48,6 +48,37 @@ export default defineSchema({
     healthScore: v.optional(v.number()),
     healthUpdatedAt: v.optional(v.number()),
     segmentTags: v.optional(v.array(v.string())),
+    // Ported from gray-ui-csm: CSM-oriented account fields.
+    primaryContactName: v.optional(v.string()),
+    primaryContactEmail: v.optional(v.string()),
+    region: v.optional(v.string()),
+    segment: v.optional(
+      v.union(
+        v.literal("strategic"),
+        v.literal("enterprise"),
+        v.literal("growth"),
+        v.literal("mid_market"),
+        v.literal("smb"),
+      ),
+    ),
+    lifecycle: v.optional(
+      v.union(
+        v.literal("onboarding"),
+        v.literal("active"),
+        v.literal("renewal"),
+        v.literal("paused"),
+        v.literal("archived"),
+      ),
+    ),
+    arr: v.optional(v.number()),
+    seats: v.optional(v.number()),
+    csat: v.optional(v.number()),
+    accountOwnerId: v.optional(v.id("users")),
+    renewalDate: v.optional(v.string()), // ISO yyyy-mm-dd, matches issues.dueDate format
+    lastTouchAt: v.optional(v.number()),
+    summary: v.optional(v.string()),
+    productAreas: v.optional(v.array(v.string())),
+    riskSignals: v.optional(v.array(v.string())),
     createdBy: v.id("users"),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -56,7 +87,11 @@ export default defineSchema({
     .index("by_active", ["isActive"])
     .index("by_tier", ["tier"])
     .index("by_healthScore", ["healthScore"])
-    .index("by_domain", ["domain"]),
+    .index("by_domain", ["domain"])
+    .index("by_segment", ["segment"])
+    .index("by_lifecycle", ["lifecycle"])
+    .index("by_accountOwner", ["accountOwnerId"])
+    .index("by_renewalDate", ["renewalDate"]),
 
   issues: defineTable({
     title: v.string(),
@@ -455,4 +490,19 @@ export default defineSchema({
     undone: v.boolean(),
     createdAt: v.number(),
   }).index("by_user_expires", ["userId", "expiresAt"]),
+
+  // Sub-tasks — ported from gray-ui-csm inline task list.
+  // Lightweight checklist items scoped to a parent issue.
+  subTasks: defineTable({
+    issueId: v.id("issues"),
+    title: v.string(),
+    status: v.union(v.literal("todo"), v.literal("doing"), v.literal("done")),
+    order: v.number(),
+    assigneeId: v.optional(v.id("users")),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_issue", ["issueId"])
+    .index("by_issue_order", ["issueId", "order"]),
 });

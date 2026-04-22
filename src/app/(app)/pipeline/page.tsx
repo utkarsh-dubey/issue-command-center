@@ -1,14 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { SlidersHorizontal } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataGridColumnOptionsMenu } from "@/components/data-grid/column-options-menu";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,11 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { IssueDrawer } from "@/components/issues/issue-drawer";
+import { IssuesDataGrid, type IssueGridRow } from "@/components/issues/issues-data-grid";
 import { ViewSwitcher } from "@/components/app/view-switcher";
-import { formatDueDate, relativeTime } from "@/lib/date";
 import { api } from "@/lib/convex-api";
-import { BAND_LABELS, PRIORITY_BANDS, URGENCIES, getBandLabel, getStatusLabel, getUrgencyLabel } from "@/lib/domain";
+import { BAND_LABELS, PRIORITY_BANDS, URGENCIES, getStatusLabel, getUrgencyLabel } from "@/lib/domain";
+import { getErrorMessage } from "@/lib/errors";
 import { isPipelineStage } from "@/lib/pipeline";
 
 function parseOptionalNumber(value: string) {
@@ -36,6 +38,8 @@ export default function PipelinePage() {
   const users = useQuery(api.users.listAssignable, {});
   const customers = useQuery(api.customers.list, {});
   const themes = useQuery(api.themes.list, {});
+  const updateBasics = useMutation(api.issues.updateBasics);
+
   const [band, setBand] = useState<string>("all");
   const [urgency, setUrgency] = useState<string>("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
@@ -111,6 +115,36 @@ export default function PipelinePage() {
     return map;
   }, [themes]);
 
+  const gridRows = useMemo<IssueGridRow[]>(() => {
+    if (!pipeline) return [];
+    return pipeline.map((issue: {
+      _id: string;
+      title: string;
+      customerId?: string;
+      themeId?: string;
+      priorityBand?: string | null;
+      finalPriorityScore?: number | null;
+      urgency: string;
+      dueDate?: string | null;
+      status: string;
+      assigneeId?: string;
+      updatedAt: number;
+    }) => ({
+      id: issue._id,
+      issueId: issue._id,
+      title: issue.title,
+      customerName: issue.customerId ? customerById.get(issue.customerId) ?? null : null,
+      themeName: issue.themeId ? themeById.get(issue.themeId) ?? null : null,
+      priorityBand: issue.priorityBand ?? null,
+      finalPriorityScore: issue.finalPriorityScore ?? null,
+      urgency: issue.urgency,
+      dueDate: issue.dueDate ?? null,
+      status: issue.status,
+      assigneeName: issue.assigneeId ? userById.get(issue.assigneeId) ?? "Unknown" : null,
+      updatedAt: issue.updatedAt,
+    }));
+  }, [pipeline, customerById, themeById, userById]);
+
   const activeFilterCount = [
     activeStage !== "all",
     search.trim().length > 0,
@@ -140,8 +174,19 @@ export default function PipelinePage() {
     setScoreMax("");
   };
 
+  const handleTitleChange = async (issueId: string, nextTitle: string) => {
+    try {
+      await updateBasics({ issueId: issueId as never, patch: { title: nextTitle } });
+      toast.success("Title updated");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update title"));
+    }
+  };
+
+  const [drawerIssueId, setDrawerIssueId] = useState<string | null>(null);
+
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -215,7 +260,7 @@ export default function PipelinePage() {
                         <SelectContent>
                           <SelectItem value="all">All assignees</SelectItem>
                           <SelectItem value="none">Unassigned only</SelectItem>
-                          {(users ?? []).map((user: any) => (
+                          {(users ?? []).map((user: { _id: string; name: string }) => (
                             <SelectItem key={user._id} value={user._id}>
                               {user.name}
                             </SelectItem>
@@ -229,7 +274,7 @@ export default function PipelinePage() {
                         <SelectContent>
                           <SelectItem value="all">All customers</SelectItem>
                           <SelectItem value="none">No customer linked</SelectItem>
-                          {(customers ?? []).map((customer: any) => (
+                          {(customers ?? []).map((customer: { _id: string; name: string }) => (
                             <SelectItem key={customer._id} value={customer._id}>
                               {customer.name}
                             </SelectItem>
@@ -244,7 +289,7 @@ export default function PipelinePage() {
                           <SelectContent>
                             <SelectItem value="all">All themes</SelectItem>
                             <SelectItem value="none">No theme linked</SelectItem>
-                            {(themes ?? []).map((theme: any) => (
+                            {(themes ?? []).map((theme: { _id: string; name: string }) => (
                               <SelectItem key={theme._id} value={theme._id}>
                                 {theme.name}
                               </SelectItem>
@@ -323,62 +368,64 @@ export default function PipelinePage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{activeStage === "all" ? "Current Pipeline" : `${getStatusLabel(activeStage)} Queue`}</CardTitle>
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 border-b">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle>{activeStage === "all" ? "Current Pipeline" : `${getStatusLabel(activeStage)} Queue`}</CardTitle>
+          </div>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Issue</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Theme</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead>Urgency</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Assignee</TableHead>
-                <TableHead>Updated</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pipeline?.map((issue: any) => (
-                <TableRow key={issue._id}>
-                  <TableCell>
-                    <Link className="font-medium hover:underline" href={`/issues/${issue._id}`}>
-                      {issue.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{issue.customerId ? customerById.get(issue.customerId) ?? "-" : "-"}</TableCell>
-                  <TableCell>{issue.themeId ? themeById.get(issue.themeId) ?? "-" : "-"}</TableCell>
-                  <TableCell>
-                    <Badge className="bg-foreground text-background">{getBandLabel(issue.priorityBand)}</Badge>
-                  </TableCell>
-                  <TableCell>{issue.finalPriorityScore ?? "-"}</TableCell>
-                  <TableCell>{getUrgencyLabel(issue.urgency)}</TableCell>
-                  <TableCell>{issue.dueDate ? formatDueDate(issue.dueDate) : "-"}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{getStatusLabel(issue.status)}</Badge>
-                  </TableCell>
-                  <TableCell>{issue.assigneeId ? userById.get(issue.assigneeId) ?? "Unknown" : "Unassigned"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{relativeTime(issue.updatedAt)}</TableCell>
-                </TableRow>
-              ))}
-              {pipeline && pipeline.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center text-sm text-muted-foreground">
-                    {activeStage === "all"
-                      ? "No issues match current filters."
-                      : `No ${getStatusLabel(activeStage).toLowerCase()} issues match current filters.`}
-                  </TableCell>
-                </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          <IssuesDataGrid
+            rows={gridRows}
+            onTitleChange={handleTitleChange}
+            fillAvailableHeight
+            stickySummaryFooter
+            tableContainerClassName="h-full overflow-auto"
+            onOpenIssueDrawer={(issueId) => setDrawerIssueId(issueId)}
+            renderToolbar={(toolbarProps) => (
+              <div className="flex items-center justify-between gap-2 border-b bg-background px-3 py-2">
+                <div className="text-xs text-muted-foreground">
+                  {toolbarProps.visibleRowCount} rows
+                  {toolbarProps.selectedRowCount > 0 ? (
+                    <>
+                      {" "}
+                      · <span className="font-medium text-foreground">{toolbarProps.selectedRowCount}</span>{" "}
+                      selected
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="ml-2 h-7"
+                        onClick={toolbarProps.clearSelection}
+                      >
+                        Clear
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+                <DataGridColumnOptionsMenu {...toolbarProps} />
+              </div>
+            )}
+          />
+          {pipeline && pipeline.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <p className="text-sm font-medium text-foreground">No issues match current filters</p>
+              <p className="text-xs text-muted-foreground">
+                {activeStage === "all"
+                  ? "Try clearing filters to see everything in the pipeline."
+                  : `No ${getStatusLabel(activeStage).toLowerCase()} issues yet.`}
+              </p>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
+
+      <IssueDrawer
+        issueId={drawerIssueId}
+        open={drawerIssueId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDrawerIssueId(null);
+        }}
+      />
     </div>
   );
 }

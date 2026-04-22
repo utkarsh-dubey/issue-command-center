@@ -22,6 +22,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/editor/rich-text-editor";
+import { SubTasksInlineList } from "@/components/issues/sub-tasks-inline-list";
 import { WatchToggle } from "@/components/issues/watch-toggle";
 import { PresenceIndicator } from "@/components/app/presence-indicator";
 import { ReactionPicker } from "@/components/comments/reaction-picker";
@@ -857,6 +858,19 @@ export default function IssueDetailPage() {
               </div>
             ))
           )}
+        </CardContent>
+      </Card>
+
+      {/* Sub-tasks */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Sub-tasks</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Break this issue into checklist items. Drag to reorder, double-click a title to edit.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <SubTasksInlineList issueId={issueId} />
         </CardContent>
       </Card>
 

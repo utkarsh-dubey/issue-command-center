@@ -11,6 +11,33 @@ function normalizeDomain(value: string) {
   return value.trim().toLowerCase();
 }
 
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+const segmentValidator = v.union(
+  v.literal("strategic"),
+  v.literal("enterprise"),
+  v.literal("growth"),
+  v.literal("mid_market"),
+  v.literal("smb"),
+);
+
+const lifecycleValidator = v.union(
+  v.literal("onboarding"),
+  v.literal("active"),
+  v.literal("renewal"),
+  v.literal("paused"),
+  v.literal("archived"),
+);
+
+const tierValidator = v.union(
+  v.literal("enterprise"),
+  v.literal("mid_market"),
+  v.literal("smb"),
+  v.literal("free"),
+);
+
 export const list = query({
   args: {
     activeOnly: v.optional(v.boolean()),
@@ -30,8 +57,17 @@ export const listWithIssueCounts = query({
   handler: async (ctx) => {
     await requireUser(ctx);
 
-    const [customers, issues] = await Promise.all([ctx.db.query("customers").collect(), ctx.db.query("issues").collect()]);
+    const [customers, issues, users] = await Promise.all([
+      ctx.db.query("customers").collect(),
+      ctx.db.query("issues").collect(),
+      ctx.db.query("users").collect(),
+    ]);
     const counts = new Map<string, number>();
+    const userNames = new Map<string, string>();
+
+    for (const u of users) {
+      userNames.set(u._id, u.name);
+    }
 
     for (const issue of issues) {
       if (issue.archivedAt || !issue.customerId) continue;
@@ -42,6 +78,7 @@ export const listWithIssueCounts = query({
       .map((customer) => ({
         ...customer,
         issueCount: counts.get(customer._id) ?? 0,
+        accountOwnerName: customer.accountOwnerId ? userNames.get(customer.accountOwnerId) ?? null : null,
       }))
       .sort((a, b) => {
         if (a.isActive !== b.isActive) {
@@ -78,7 +115,20 @@ export const create = mutation({
     name: v.string(),
     domain: v.optional(v.string()),
     notes: v.optional(v.string()),
-    tier: v.optional(v.union(v.literal("enterprise"), v.literal("mid_market"), v.literal("smb"), v.literal("free"))),
+    tier: v.optional(tierValidator),
+    primaryContactName: v.optional(v.string()),
+    primaryContactEmail: v.optional(v.string()),
+    region: v.optional(v.string()),
+    segment: v.optional(segmentValidator),
+    lifecycle: v.optional(lifecycleValidator),
+    arr: v.optional(v.number()),
+    seats: v.optional(v.number()),
+    csat: v.optional(v.number()),
+    accountOwnerId: v.optional(v.id("users")),
+    renewalDate: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    productAreas: v.optional(v.array(v.string())),
+    riskSignals: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
@@ -107,6 +157,19 @@ export const create = mutation({
       notes: args.notes?.trim(),
       tier: args.tier,
       isActive: true,
+      primaryContactName: args.primaryContactName?.trim() || undefined,
+      primaryContactEmail: args.primaryContactEmail ? normalizeEmail(args.primaryContactEmail) : undefined,
+      region: args.region?.trim() || undefined,
+      segment: args.segment,
+      lifecycle: args.lifecycle,
+      arr: args.arr,
+      seats: args.seats,
+      csat: args.csat,
+      accountOwnerId: args.accountOwnerId,
+      renewalDate: args.renewalDate?.trim() || undefined,
+      summary: args.summary?.trim() || undefined,
+      productAreas: args.productAreas,
+      riskSignals: args.riskSignals,
       createdBy: user._id,
       createdAt: now,
       updatedAt: now,
@@ -123,8 +186,23 @@ export const update = mutation({
     domain: v.optional(v.union(v.string(), v.null())),
     notes: v.optional(v.union(v.string(), v.null())),
     isActive: v.optional(v.boolean()),
-    tier: v.optional(v.union(v.literal("enterprise"), v.literal("mid_market"), v.literal("smb"), v.literal("free"), v.null())),
+    tier: v.optional(v.union(tierValidator, v.null())),
     segmentTags: v.optional(v.array(v.string())),
+    // Ported from gray-ui-csm: CSM-oriented account fields.
+    primaryContactName: v.optional(v.union(v.string(), v.null())),
+    primaryContactEmail: v.optional(v.union(v.string(), v.null())),
+    region: v.optional(v.union(v.string(), v.null())),
+    segment: v.optional(v.union(segmentValidator, v.null())),
+    lifecycle: v.optional(v.union(lifecycleValidator, v.null())),
+    arr: v.optional(v.union(v.number(), v.null())),
+    seats: v.optional(v.union(v.number(), v.null())),
+    csat: v.optional(v.union(v.number(), v.null())),
+    accountOwnerId: v.optional(v.union(v.id("users"), v.null())),
+    renewalDate: v.optional(v.union(v.string(), v.null())),
+    lastTouchAt: v.optional(v.union(v.number(), v.null())),
+    summary: v.optional(v.union(v.string(), v.null())),
+    productAreas: v.optional(v.array(v.string())),
+    riskSignals: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const { user } = await requireUser(ctx);
@@ -174,6 +252,66 @@ export const update = mutation({
 
     if (args.segmentTags !== undefined) {
       patch.segmentTags = args.segmentTags;
+    }
+
+    if (args.primaryContactName !== undefined) {
+      patch.primaryContactName =
+        typeof args.primaryContactName === "string" ? args.primaryContactName.trim() || undefined : undefined;
+    }
+
+    if (args.primaryContactEmail !== undefined) {
+      patch.primaryContactEmail =
+        typeof args.primaryContactEmail === "string"
+          ? normalizeEmail(args.primaryContactEmail) || undefined
+          : undefined;
+    }
+
+    if (args.region !== undefined) {
+      patch.region = typeof args.region === "string" ? args.region.trim() || undefined : undefined;
+    }
+
+    if (args.segment !== undefined) {
+      patch.segment = args.segment ?? undefined;
+    }
+
+    if (args.lifecycle !== undefined) {
+      patch.lifecycle = args.lifecycle ?? undefined;
+    }
+
+    if (args.arr !== undefined) {
+      patch.arr = args.arr ?? undefined;
+    }
+
+    if (args.seats !== undefined) {
+      patch.seats = args.seats ?? undefined;
+    }
+
+    if (args.csat !== undefined) {
+      patch.csat = args.csat ?? undefined;
+    }
+
+    if (args.accountOwnerId !== undefined) {
+      patch.accountOwnerId = args.accountOwnerId ?? undefined;
+    }
+
+    if (args.renewalDate !== undefined) {
+      patch.renewalDate = typeof args.renewalDate === "string" ? args.renewalDate.trim() || undefined : undefined;
+    }
+
+    if (args.lastTouchAt !== undefined) {
+      patch.lastTouchAt = args.lastTouchAt ?? undefined;
+    }
+
+    if (args.summary !== undefined) {
+      patch.summary = typeof args.summary === "string" ? args.summary.trim() || undefined : undefined;
+    }
+
+    if (args.productAreas !== undefined) {
+      patch.productAreas = args.productAreas;
+    }
+
+    if (args.riskSignals !== undefined) {
+      patch.riskSignals = args.riskSignals;
     }
 
     await ctx.db.patch(args.customerId, patch);
